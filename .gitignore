@@ -1,3 +1,4 @@
 .pio/
 .vscode/
 test/host/test_core
+include/camera_wifi.h

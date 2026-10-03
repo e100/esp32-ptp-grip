@@ -2,6 +2,7 @@
 // ============================================================================
 // Grip configuration — edit this file to match your build.
 //
+// 0. CAMERA: the camera's WiFi network (see the README for camera setup).
 // 1. ENCODERS[] and BUTTONS[] describe the hardware. An encoder's push switch
 //    is just another entry in BUTTONS[].
 // 2. BINDINGS[] maps each input to an action. The first matching row wins,
@@ -13,9 +14,23 @@
 // 26-37 (flash/PSRAM on most modules).
 // ============================================================================
 #include "GripConfig.h"
+#if __has_include("camera_wifi.h")
+#include "camera_wifi.h"
+#else
+#include "camera_wifi.example.h"
+#endif
 
 namespace grip {
 namespace config {
+
+// Camera WiFi. On the ZR: Network > Connect to computer > Camera Control, with a
+// "Direct connection to computer" profile. The camera shows the SSID and key;
+// put them in include/camera_wifi.h (copy camera_wifi.example.h), which git ignores.
+static const CameraConfig CAMERA = {
+    CAMERA_WIFI_SSID,
+    CAMERA_WIFI_KEY,
+    "192.168.1.1",   // camera IP; 192.168.1.1 in direct-connection mode
+};
 
 static const DisplayConfig OLED = { true, 8, 9 };   // SSD1306 128x32, I2C SDA, SCL
 

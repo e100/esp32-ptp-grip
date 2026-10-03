@@ -27,4 +27,10 @@ struct DisplayConfig {
     uint8_t sclPin;
 };
 
+struct CameraConfig {
+    const char* ssid;              // camera's WiFi network; empty = no camera (input only)
+    const char* password;
+    const char* host;              // camera's IP address on that network
+};
+
 }  // namespace grip

@@ -16,6 +16,7 @@ Goals: two-stage shutter, record, and quick control of ISO, shutter, aperture, e
 
 Everything about your build lives in [include/grip_config.h](include/grip_config.h):
 
+- **`CAMERA`**: the camera's IP address. Its WiFi name (SSID) and key go in `include/camera_wifi.h`: copy `camera_wifi.example.h` and fill them in. Git ignores that file, so the key stays out of the repo. Leave the SSID empty to run without a camera.
 - **`ENCODERS[]`**: the A/B pins of each encoder or thumb wheel. An encoder's push switch is configured as an ordinary button, so wheels with no switch work too.
 - **`BUTTONS[]`**: one pin per button or switch.
 - **`BINDINGS[]`**: what each input does. Each row says which input, what triggers it (`Turn`, `Hold`, `Short`, `Long`), in which camera mode (`MODE_PHOTO`, `MODE_VIDEO`, `MODE_ANY`) and on which layer. The first matching row wins.
@@ -50,6 +51,17 @@ pio run -t upload && pio device monitor   # build, flash, open serial monitor
 make -C test/host test                    # run the input-logic tests on your computer
 ```
 
-The current firmware is an input bring-up tool. It prints each control's action to Serial and the OLED. Send `v` over Serial to toggle photo/video mode.
+The current firmware pairs with the camera and shows each control's action on Serial and the OLED. It doesn't send those actions to the camera yet.
+
+Serial commands: `v` toggles photo/video mode, `s` shows the link status, `p` starts pairing, `y`/`n` accept or cancel a pairing code, `d` dumps camera diagnostics, `l` toggles library debug logging.
+
+## Pairing with the camera (Nikon ZR)
+
+1. On the camera: Network → Connect to computer, connection type **Camera Control**. Create a profile with **Direct connection to computer**. Each profile can be paired to one device, so use a new profile if this one is already paired to something else.
+2. Put the SSID and key the camera shows into `include/camera_wifi.h` (copied from `camera_wifi.example.h`), then build and flash.
+3. The grip joins the camera's WiFi and shows a pairing code. If it matches the code on the camera, press any grip button.
+4. Confirm the grip on the camera. The grip reconnects and shows **Connected**.
+
+The grip keeps a random ID (GUID) in flash, and the camera remembers that ID, so pairing happens once. Erasing the whole flash makes a new ID, and then you need to pair again with a fresh profile.
 
 `platformio.ini` currently points at a local checkout of PtpIpCamera (`../PtpIpCamera`) while Nikon support is being developed.

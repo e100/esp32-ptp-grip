@@ -129,12 +129,23 @@ static void printOptions() {
     }
 }
 
+// Read one non-empty line from Serial, waiting up to 30 s. Skips the line
+// ending left over from the Enter pressed after the command letter.
+static String readLine() {
+    Serial.setTimeout(30000);
+    String line;
+    uint32_t start = millis();
+    while (line.length() == 0 && millis() - start < 30000) {
+        line = Serial.readStringUntil('\n');
+        line.trim();
+    }
+    return line;
+}
+
 // "x D0B5 6400": write a property by hex code and decimal value, then read it back.
 static void writeProperty() {
     Serial.println("write: enter <hex code> <decimal value>, e.g. D0B5 6400");
-    Serial.setTimeout(30000);
-    String line = Serial.readStringUntil('\n');
-    line.trim();
+    String line = readLine();
     char* end;
     unsigned long code = strtoul(line.c_str(), &end, 16);
     if (end == line.c_str() || code == 0) {
@@ -160,9 +171,7 @@ static void writeProperty() {
 // data-in transaction and print the response code and any data received.
 static void rawOperation() {
     Serial.println("raw: enter <hex opcode> [hex params...], e.g. 1014 1D0A5");
-    Serial.setTimeout(30000);
-    String line = Serial.readStringUntil('\n');
-    line.trim();
+    String line = readLine();
     const char* p = line.c_str();
     char* end;
     unsigned long op = strtoul(p, &end, 16);

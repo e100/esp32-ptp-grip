@@ -1,4 +1,5 @@
 #include "CameraControl.h"
+#include <math.h>
 #include <stdarg.h>
 
 using grip::Setting;
@@ -126,6 +127,22 @@ static const char* whiteBalanceName(uint32_t v) {
     }
 }
 
+// The camera reports shutter speeds as whole 1/10000 s units, so 1/160 arrives
+// as 62 and 1/320 as 31. Show the nearest standard speed.
+static unsigned nominalDenominator(uint32_t t) {
+    static const uint16_t SPEEDS[] = {
+        4, 5, 6, 8, 10, 13, 15, 20, 25, 30, 40, 50, 60, 80, 100, 125, 160, 200, 250, 320,
+        400, 500, 640, 800, 1000, 1250, 1600, 2000, 2500, 3200, 4000, 5000, 6400, 8000,
+        10000, 12800, 16000, 20000, 25000, 32000,
+    };
+    double exact = 10000.0 / t;
+    unsigned best = SPEEDS[0];
+    for (uint16_t s : SPEEDS) {
+        if (fabs(log(s / exact)) < fabs(log(best / exact))) best = s;
+    }
+    return best;
+}
+
 void CameraControl::format(Setting s, int32_t value, char* buf, size_t len) {
     switch (s) {
         case Setting::ISO:
@@ -136,7 +153,8 @@ void CameraControl::format(Setting s, int32_t value, char* buf, size_t len) {
             if (t >= 0xFFFFFFF0u)   snprintf(buf, len, "Bulb");
             else if (t == 0)        snprintf(buf, len, "Shutter --");
             else if (t >= 10000)    snprintf(buf, len, t % 10000 ? "%.1fs" : "%.0fs", t / 10000.0);
-            else                    snprintf(buf, len, "1/%ld", lround(10000.0 / t));
+            else if (t >= 2500)     snprintf(buf, len, "%.1fs", t / 10000.0);
+            else                    snprintf(buf, len, "1/%u", nominalDenominator(t));
             break;
         }
         case Setting::Aperture:

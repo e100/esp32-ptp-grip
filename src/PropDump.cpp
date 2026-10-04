@@ -145,7 +145,27 @@ struct Scan {
     }
 };
 
-void dumpCameraProps(NikonCamera& camera, Print& out) {
+static void printCodes(Print& out, const char* label, const uint16_t* codes, uint16_t n) {
+    out.printf("%s (%u):", label, n);
+    for (uint16_t i = 0; i < n; i++) {
+        if (i % 16 == 0) out.print("\n ");
+        out.printf(" %04X", codes[i]);
+    }
+    out.println();
+}
+
+void dumpDeviceInfo(NikonCamera& camera, Print& out) {
+    const PtpDeviceInfo& info = camera.deviceInfo();
+    out.printf("%s %s firmware %s, vendor extension 0x%08lX v%u, mode %u%s\n",
+               info.manufacturer, info.model, info.deviceVersion,
+               (unsigned long)info.vendorExtensionId, info.vendorExtensionVersion,
+               info.functionalMode, info.truncated ? " (lists truncated)" : "");
+    printCodes(out, "operations", info.operations, info.numOperations);
+    printCodes(out, "events", info.events, info.numEvents);
+    printCodes(out, "properties", info.properties, info.numProperties);
+}
+
+void dumpCameraProps(NikonCamera& camera, Print& out, bool fullScan) {
     if (!camera.isReady()) {
         out.println("dump: camera not connected");
         return;
@@ -155,15 +175,15 @@ void dumpCameraProps(NikonCamera& camera, Print& out) {
     Scan scan(camera, out);
     out.println("=== property dump begin ===");
 
-    if (info.numProperties > 0) {
+    if (info.numProperties > 0 && !fullScan) {
         out.printf("DeviceInfo lists %u properties\n", info.numProperties);
         for (uint16_t i = 0; i < info.numProperties; i++) {
             if (!scan.visit(info.properties[i])) break;
         }
     } else {
-        // The ZR's restricted DeviceInfo lists none, so try every likely code:
+        // DeviceInfo may not list everything, so try every likely code:
         // standard properties 0x5001-0x5030 and vendor properties 0xD000-0xD3FF.
-        out.println("DeviceInfo lists no properties; scanning 5001-5030 and D000-D3FF (may take a while)");
+        out.println("scanning 5001-5030 and D000-D3FF (may take a while)");
         bool ok = true;
         for (uint32_t code = 0x5001; ok && code <= 0x5030; code++) ok = scan.visit((uint16_t)code);
         for (uint32_t code = 0xD000; ok && code <= 0xD3FF; code++) ok = scan.visit((uint16_t)code);

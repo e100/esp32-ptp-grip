@@ -10,7 +10,8 @@ namespace grip {
 struct EncoderConfig {
     uint8_t     pinA;
     uint8_t     pinB;
-    int8_t      countsPerDetent;   // quadrature counts per click; 4 for most EC11 encoders
+    int8_t      countsPerDetent;   // quadrature counts per click: 4 for most EC11 encoders, 2 for half-step ones
+                                   // (if only every other click registers, halve it)
     bool        reverse;           // flip direction
     const char* label;
 };

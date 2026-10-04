@@ -36,8 +36,8 @@ static const DisplayConfig OLED = { true, 8, 9 };   // SSD1306 128x32, I2C SDA, 
 
 static const EncoderConfig ENCODERS[] = {
     //  A  B  counts/detent  reverse  label
-    {   4, 5, 4,             true,    "wheel" },   // encoder(0): thumb wheel
-    {   6, 7, 4,             true,    "iso"   },   // encoder(1): dedicated ISO dial
+    {   4, 5, 2,             true,    "wheel" },   // encoder(0): thumb wheel
+    {   6, 7, 2,             true,    "iso"   },   // encoder(1): dedicated ISO dial
 };
 
 static const ButtonConfig BUTTONS[] = {

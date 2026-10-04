@@ -8,9 +8,12 @@ Goals: two-stage shutter, record, and quick control of ISO, shutter, aperture, e
 
 ## Hardware
 
-- ESP32-S3 board (needed for USB camera control later; WiFi works on any ESP32)
+- ESP32-S3 board with a separate UART/COM USB port (USB camera control needs the S3's native USB port)
 - 0.91" 128x32 SSD1306 I2C OLED
-- Rotary encoders / thumb wheels, push buttons, an optional two-stage shutter switch, LEDs
+- Rotary encoders / thumb wheels, push buttons, an optional two-stage shutter switch
+- A USB-C (or USB-A) socket for the camera
+
+Pin-by-pin wiring, power and the camera USB port: [docs/WIRING.md](docs/WIRING.md).
 
 ## Configuring your grip
 

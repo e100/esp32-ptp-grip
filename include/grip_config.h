@@ -11,6 +11,9 @@
 // 3. PHOTO_SETTINGS[] / VIDEO_SETTINGS[] are what SelectNext/SelectPrev cycle
 //    through in each camera mode (used by adjustSelected()).
 //
+// Wiring for these pins (and the camera USB port, OLED and power) is in
+// docs/WIRING.md: keep it in step when you change a pin here.
+//
 // ESP32-S3 pin notes: avoid GPIO 0, 3, 45, 46 (strapping), 19/20 (USB), and
 // 26-37 (flash/PSRAM on most modules).
 // ============================================================================

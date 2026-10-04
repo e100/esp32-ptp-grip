@@ -1,8 +1,8 @@
 #pragma once
 // ============================================================================
-// UsbLink — the camera over USB (GRIP_CAMERA_USB builds). Same interface as
-// CameraLink, without WiFi or pairing: waits for a camera on the native USB
-// port, connects, keeps the session up, and reconnects after unplugging.
+// UsbLink — the camera over USB (GRIP_CAMERA_USB builds; AutoLink switches
+// between it and CameraLink). No WiFi or pairing: waits for a camera on the
+// native USB port, connects, keeps the session up, and notices unplugging.
 // ============================================================================
 
 #include <PtpIpCamera.h>
@@ -23,7 +23,7 @@ public:
 
     UsbLink(NikonCamera& camera, PtpUsbSession& session) : _camera(camera), _session(session) {}
 
-    void begin(const grip::CameraConfig& config);
+    void begin();         // starts the USB host
     void update(uint32_t now);
 
     bool onButtonPress();     // resumes after disconnect(); otherwise not used

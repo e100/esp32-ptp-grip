@@ -2,8 +2,9 @@
 //
 // Reads the encoders and buttons from include/grip_config.h, runs them through
 // the binding engine, and shows the resulting commands on Serial and the OLED.
-// Joins the camera's WiFi and pairs with it (see CameraLink.h), or with
-// GRIP_CAMERA_USB talks to it over the native USB port (UsbLink.h). Encoder steps
+// Talks to the camera over the native USB port when one is plugged in, and
+// otherwise joins a configured camera's WiFi, pairing if needed (AutoLink.h,
+// CameraLink.h, UsbLink.h). Encoder steps
 // change the camera's settings (CameraControl.h); the shutter button focuses
 // and shoots, REC starts/stops movies. Photo/video mode follows the camera's switch.
 //
@@ -24,8 +25,7 @@
 #include <U8g2lib.h>
 #include <PtpIpCamera.h>
 #include "BindingEngine.h"
-#include "CameraLink.h"
-#include "UsbLink.h"
+#include "AutoLink.h"
 #include "CameraControl.h"
 #include "PropDump.h"
 #include "InputFilters.h"
@@ -49,16 +49,17 @@ static BindingEngine engine(config::BINDINGS, COUNT(config::BINDINGS),
 static U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C display(U8G2_R0, U8X8_PIN_NONE,
                                                        config::OLED.sclPin, config::OLED.sdaPin);
 
-#ifdef GRIP_CAMERA_USB
-static PtpUsbSession  session;
-using Link = UsbLink;
-#else
+// One camera object; SwitchSession points it at WiFi or USB (AutoLink decides).
 static PtpIpTransport transport;
-static PtpIpSession   session(transport);
-using Link = CameraLink;
-#endif
+static PtpIpSession   ipSession(transport);
+static SwitchSession  session(ipSession);
 static NikonCamera    camera(session);
-static Link           camLink(camera, session);
+#ifdef GRIP_AUTO_USB
+static PtpUsbSession  usbSession;
+static AutoLink       camLink(camera, session, ipSession, usbSession);
+#else
+static AutoLink       camLink(camera, session, ipSession);
+#endif
 static CameraControl  control(camera);
 static bool           debugLog = false;
 static bool           showEvents = false;
@@ -87,7 +88,7 @@ static void redraw() {
     if (!config::OLED.enabled) return;
     const char* top = lastLine;
     char status[32];
-    if (camLink.connected() || camLink.state() == Link::State::Disabled) {
+    if (camLink.connected() || camLink.disabled()) {
         snprintf(status, sizeof(status), "%s L%u  %s%s",
                  control.recording() ? "*REC*" : engine.cameraMode() == CameraMode::Photo ? "PHOTO" : "VIDEO",
                  engine.activeLayer(), settingName(engine.selected()),
@@ -351,7 +352,7 @@ void setup() {
     // remaining time while connected. The library leaves it again in end()
     // ('q'); send 'q' before reflashing.
     camera.setApplicationMode(true);
-    camLink.begin(config::CAMERA);
+    camLink.begin(config::CAMERAS, COUNT(config::CAMERAS));
 }
 
 void loop() {

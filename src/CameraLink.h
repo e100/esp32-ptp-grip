@@ -1,7 +1,9 @@
 #pragma once
 // ============================================================================
-// CameraLink — joins the camera's WiFi, finds it, pairs if needed and keeps
-// the PTP/IP session up. Non-blocking apart from the network calls themselves
+// CameraLink — joins a camera's WiFi, finds it, pairs if needed and keeps
+// the PTP/IP session up. With several cameras configured, it scans and joins
+// whichever is in range (strongest signal first).
+// suspend() turns WiFi off (e.g. while a camera is on USB); resume() restarts. Non-blocking apart from the network calls themselves
 // (begin() and the mDNS query can each take a few seconds).
 //
 // Pairing (Nikon Z, see PtpIpCamera's README):
@@ -20,6 +22,7 @@ class CameraLink {
 public:
     enum class State : uint8_t {
         Disabled,       // no SSID configured
+        Scanning,       // looking for a configured camera's WiFi
         JoiningWifi,
         Finding,        // mDNS query for the camera's pairing state
         Connecting,     // PTP/IP begin()
@@ -29,12 +32,17 @@ public:
         OtherHost,      // camera is paired with another device
         Stopped,        // pairing cancelled, or disconnect(); a button press or connect() retries
         Waiting,        // retry after an error
+        Suspended,      // WiFi off: suspend() was called
     };
 
     CameraLink(NikonCamera& camera, PtpIpSession& session) : _camera(camera), _session(session) {}
 
-    void begin(const grip::CameraConfig& config);
+    // cameras: the WiFi cameras the grip may join; entries with an empty SSID are skipped.
+    void begin(const grip::CameraConfig* cameras, size_t count);
     void update(uint32_t now);
+
+    void suspend();      // close any session and turn WiFi off
+    void resume();       // turn WiFi back on and look for a camera again
 
     // A short button press. Returns true if the link used it (code accepted,
     // or retry after Stopped), in which case it shouldn't also be a control.
@@ -66,10 +74,15 @@ private:
     void   _connect(uint32_t now);
     void   _startPairing(uint32_t now);
     void   _loadIdentity();
+    void   _startWifi(uint32_t now);         // scan, or join the only camera directly
+    bool   _pickFromScan();                  // choose a camera from scan results into _cfg
 
     NikonCamera&         _camera;
     PtpIpSession&        _session;
-    grip::CameraConfig   _cfg {};
+    const grip::CameraConfig* _cams = nullptr;
+    size_t               _camCount = 0;       // entries in _cams
+    size_t               _numCams = 0;        // usable entries (with an SSID)
+    grip::CameraConfig   _cfg {};             // the camera being joined / connected
     State                _state = State::Disabled;
     uint32_t             _since = 0;          // when _state was entered
     uint32_t             _retryAt = 0;

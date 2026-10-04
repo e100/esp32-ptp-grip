@@ -25,10 +25,14 @@ void CameraLink::_loadIdentity() {
     _session.setHostIdentity(guid, HOST_NAME);
 }
 
-void CameraLink::begin(const grip::CameraConfig& config) {
-    _cfg = config;
-    if (!_cfg.ssid || !_cfg.ssid[0]) {
-        Serial.println("link: no camera SSID in grip_config.h, camera disabled");
+void CameraLink::begin(const grip::CameraConfig* cameras, size_t count) {
+    // Keep only usable entries (an SSID is required)
+    _cams = cameras;
+    _camCount = count;
+    _numCams = 0;
+    for (size_t i = 0; i < count; i++) if (cameras[i].ssid && cameras[i].ssid[0]) _numCams++;
+    if (_numCams == 0) {
+        Serial.println("link: no camera WiFi configured (include/camera_wifi.h), WiFi disabled");
         _set(State::Disabled, millis());
         return;
     }
@@ -36,9 +40,68 @@ void CameraLink::begin(const grip::CameraConfig& config) {
     WiFi.mode(WIFI_STA);
     WiFi.setHostname(HOST_NAME);
     WiFi.setAutoReconnect(true);
-    WiFi.begin(_cfg.ssid, _cfg.password);
-    Serial.printf("link: joining WiFi '%s'\n", _cfg.ssid);
-    _set(State::JoiningWifi, millis());
+    _startWifi(millis());
+}
+
+// One camera: join it directly. Several: scan and pick the strongest known one.
+void CameraLink::_startWifi(uint32_t now) {
+    if (_numCams == 1) {
+        for (size_t i = 0; i < _camCount; i++) {
+            if (_cams[i].ssid && _cams[i].ssid[0]) { _cfg = _cams[i]; break; }
+        }
+        WiFi.begin(_cfg.ssid, _cfg.password);
+        Serial.printf("link: joining WiFi '%s'\n", _cfg.ssid);
+        _set(State::JoiningWifi, now);
+        return;
+    }
+    WiFi.disconnect();
+    WiFi.scanNetworks(true);                       // async; checked in update()
+    Serial.println("link: scanning for a camera's WiFi");
+    _set(State::Scanning, now);
+}
+
+bool CameraLink::_pickFromScan() {
+    int n = WiFi.scanComplete();
+    int bestRssi = -1000;
+    const grip::CameraConfig* best = nullptr;
+    for (int i = 0; i < n; i++) {
+        String ssid = WiFi.SSID(i);
+        for (size_t k = 0; k < _camCount; k++) {
+            const grip::CameraConfig& c = _cams[k];
+            if (c.ssid && c.ssid[0] && ssid == c.ssid && WiFi.RSSI(i) > bestRssi) {
+                bestRssi = WiFi.RSSI(i);
+                best = &c;
+            }
+        }
+    }
+    WiFi.scanDelete();
+    if (!best) return false;
+    _cfg = *best;
+    Serial.printf("link: found %s (%s, %d dBm)\n", _cfg.name, _cfg.ssid, bestRssi);
+    return true;
+}
+
+void CameraLink::suspend() {
+    if (_state == State::Disabled || _state == State::Suspended) return;
+    if (_state == State::ShowingCode || _state == State::ConfirmOnCamera) _camera.cancelPairing();
+    else if (_state == State::Connected) _camera.end();
+    if (_mdnsStarted) {
+        MDNS.end();
+        _mdnsStarted = false;
+    }
+    WiFi.scanDelete();
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    Serial.println("link: WiFi off");
+    _set(State::Suspended, millis());
+}
+
+void CameraLink::resume() {
+    if (_state != State::Suspended) return;
+    Serial.println("link: WiFi on");
+    WiFi.mode(WIFI_STA);
+    _failures = 0;
+    _startWifi(millis());
 }
 
 void CameraLink::_set(State s, uint32_t now) {
@@ -60,17 +123,32 @@ void CameraLink::_retry(uint32_t now, uint32_t afterMs, const char* why) {
 }
 
 void CameraLink::update(uint32_t now) {
-    if (_state == State::Disabled) return;
+    if (_state == State::Disabled || _state == State::Suspended) return;
 
-    if (_state != State::JoiningWifi && WiFi.status() != WL_CONNECTED) {
+    if (_state != State::JoiningWifi && _state != State::Scanning && WiFi.status() != WL_CONNECTED) {
         Serial.println("link: WiFi lost");
         if (_state == State::ShowingCode || _state == State::ConfirmOnCamera) _camera.cancelPairing();
         else _camera.end();
-        _set(State::JoiningWifi, now);
+        _startWifi(now);
         return;
     }
 
     switch (_state) {
+        case State::Scanning: {
+            int n = WiFi.scanComplete();
+            if (n == WIFI_SCAN_RUNNING) break;
+            if (n >= 0 && _pickFromScan()) {
+                WiFi.begin(_cfg.ssid, _cfg.password);
+                Serial.printf("link: joining WiFi '%s'\n", _cfg.ssid);
+                _set(State::JoiningWifi, now);
+            } else if (now - _since > 5000) {           // nothing known in range: scan again
+                WiFi.scanDelete();
+                WiFi.scanNetworks(true);
+                _since = now;
+            }
+            break;
+        }
+
         case State::JoiningWifi:
             if (WiFi.status() == WL_CONNECTED) {
                 Serial.printf("link: WiFi joined, IP %s\n", WiFi.localIP().toString().c_str());
@@ -78,9 +156,13 @@ void CameraLink::update(uint32_t now) {
                 _set(State::Finding, now);
             } else if (now - _since > WIFI_RETRY_MS) {
                 Serial.println("link: WiFi not joined yet, retrying");
-                WiFi.disconnect();
-                WiFi.begin(_cfg.ssid, _cfg.password);
-                _since = now;
+                if (_numCams > 1) {
+                    _startWifi(now);                    // another camera may be in range now
+                } else {
+                    WiFi.disconnect();
+                    WiFi.begin(_cfg.ssid, _cfg.password);
+                    _since = now;
+                }
             }
             break;
 
@@ -138,6 +220,7 @@ void CameraLink::update(uint32_t now) {
 
         case State::Disabled:
         case State::Stopped:
+        case State::Suspended:
             break;
     }
 }
@@ -240,7 +323,7 @@ void CameraLink::cancel() {
 }
 
 void CameraLink::disconnect() {
-    if (_state == State::Disabled) return;
+    if (_state == State::Disabled || _state == State::Suspended) return;
     if (_state == State::ShowingCode || _state == State::ConfirmOnCamera) _camera.cancelPairing();
     else if (_state == State::Connected) _camera.end();
     Serial.println("link: disconnected. Send 'c' or press a button to reconnect");
@@ -255,7 +338,8 @@ void CameraLink::connect() {
 }
 
 void CameraLink::forcePair() {
-    if (_state == State::Disabled || _state == State::JoiningWifi) return;
+    if (_state == State::Disabled || _state == State::JoiningWifi || _state == State::Scanning ||
+        _state == State::Suspended) return;
     if (_state == State::Connected) _camera.end();
     if (_state == State::ShowingCode || _state == State::ConfirmOnCamera) return;
     _forcePair = true;
@@ -276,6 +360,7 @@ void CameraLink::printStatus(Print& out) {
 const char* CameraLink::headline() const {
     switch (_state) {
         case State::Disabled:        return "No camera";
+        case State::Scanning:        return "Finding WiFi";
         case State::JoiningWifi:     return "Joining WiFi";
         case State::Finding:         return "Finding cam";
         case State::Connecting:      return "Connecting";
@@ -285,6 +370,7 @@ const char* CameraLink::headline() const {
         case State::OtherHost:       return "Cam taken";
         case State::Stopped:         return strcmp(_detail, "disconnected") == 0 ? "Disconnected" : "Not paired";
         case State::Waiting:         return "Retrying";
+        case State::Suspended:       return "WiFi off";
     }
     return "";
 }
@@ -292,7 +378,8 @@ const char* CameraLink::headline() const {
 const char* CameraLink::detail() const {
     switch (_state) {
         case State::Disabled:        return "set SSID in config";
-        case State::JoiningWifi:     return _cfg.ssid;
+        case State::Scanning:        return "no known camera yet";
+        case State::JoiningWifi:     return _cfg.name && _cfg.name[0] ? _cfg.name : _cfg.ssid;
         case State::Finding:         return _cfg.host;
         case State::Connecting:      return _cfg.host;
         case State::ShowingCode:     return "same? press a button";
@@ -301,6 +388,7 @@ const char* CameraLink::detail() const {
         case State::OtherHost:       return "use a free profile";
         case State::Stopped:         return "button to retry";
         case State::Waiting:         return _detail;
+        case State::Suspended:       return "";
     }
     return "";
 }

@@ -16,7 +16,7 @@ Goals: two-stage shutter, record, and quick control of ISO, shutter, aperture, e
 
 Everything about your build lives in [include/grip_config.h](include/grip_config.h):
 
-- **`CAMERA`**: the camera's IP address. Its WiFi name (SSID) and key go in `include/camera_wifi.h`: copy `camera_wifi.example.h` and fill them in. Git ignores that file, so the key stays out of the repo. Leave the SSID empty to run without a camera.
+- **Cameras (WiFi):** list each camera's name, WiFi name (SSID), key and IP in `include/camera_wifi.h`: copy `camera_wifi.example.h` and fill it in. Git ignores that file, so the keys stay out of the repo. The grip joins whichever listed camera is in range. Cameras on USB need no configuration.
 - **`ENCODERS[]`**: the A/B pins of each encoder or thumb wheel. An encoder's push switch is configured as an ordinary button, so wheels with no switch work too.
 - **`BUTTONS[]`**: one pin per button or switch.
 - **`BINDINGS[]`**: what each input does. Each row says which input, what triggers it (`Turn`, `Hold`, `Short`, `Long`), in which camera mode (`MODE_PHOTO`, `MODE_VIDEO`, `MODE_ANY`) and on which layer. The first matching row wins.
@@ -47,7 +47,7 @@ While locked, only record and unlock work. Releasing a button that was already h
 Install [PlatformIO](https://platformio.org/), then:
 
 ```sh
-pio run -t upload && pio device monitor   # build, flash, open serial monitor
+pio run -t upload && pio device monitor   # build, flash, open serial monitor (through the COM port)
 make -C test/host test                    # run the input-logic tests on your computer
 ```
 
@@ -63,23 +63,32 @@ Serial commands: `f` autofocuses, `t` presses the shutter (a picture in photo mo
 
 `tools/ptpdecode.py capture.pcapng` decodes PTP/IP traffic from a Wireshark capture (e.g. of NX Tether talking to the camera), to find which operations and properties another app uses.
 
-## Camera over USB (experimental)
+## WiFi or USB: automatic
 
-The `esp32s3-usb` build talks to the camera over USB instead of WiFi. The S3's native USB pins (GPIO 19/20) become a USB host, so:
+The grip uses whichever connection is available, with no reflashing:
 
-- **Console and uploads move to the UART port** ("COM" on most boards): `pio run -e esp32s3-usb -t upload && pio device monitor -e esp32s3-usb`.
-- **The camera port must supply 5 V** and look like an ordinary 500 mA host port, so the camera doesn't try to charge from it (a ZR draws about 25 mA from such a port):
-  - **USB-A socket breakout:** GPIO 19 → D−, GPIO 20 → D+, 5V → VBUS, GND → GND. Connect the camera with a USB-C to USB-A cable (it contains the resistor that tells the camera what the port offers).
-  - **USB-C socket breakout:** as above, plus a 56 kΩ resistor from each CC pin to 5 V. Remove any 5.1 kΩ resistors the breakout has on CC. Then use a USB-C to USB-C cable.
-  - Check that the board's 5V pin really carries 5 V when powered from the COM port.
-- **Camera:** set USB to MTP/PTP. No pairing is needed over USB.
+- **Camera plugged into the grip's USB port:** the grip turns its WiFi off and controls the camera over USB. No pairing is needed.
+- **Nothing on USB:** WiFi comes on and the grip joins a camera from the list in `camera_wifi.h` (the strongest signal if several are in range), pairing the first time.
+- **Unplugging (or switching off) the USB camera** brings WiFi back within a couple of seconds.
 
-Everything that works over WiFi uses the same camera code over USB. Tested with a Nikon ZR. When uploading from VS Code, pick the `esp32s3-usb` environment: the default one is the WiFi build.
+The OLED shows the connected camera's model, with "USB" when it's on the cable.
+
+Because the S3's native USB pins (GPIO 19/20) belong to the camera, the serial console and uploads use the UART port ("COM" on most boards). Boards without a separate COM port can use the `esp32s3-wifi` environment instead: WiFi only, console on the native USB port.
+
+### Wiring the camera port
+
+The port must supply 5 V and look like an ordinary 500 mA host port, so the camera doesn't try to charge from it (a ZR draws about 25 mA from such a port):
+
+- **USB-C socket:** GPIO 19 → D−, GPIO 20 → D+, 5V → VBUS, GND → GND, and a 56 kΩ resistor (47–56 kΩ) from **each** CC pin (A5 and B5) to 5 V. With a resistor on only one CC pin, the cable works in one orientation only. Remove any 5.1 kΩ resistors a breakout has on CC.
+- **USB-A socket:** the same four wires, no resistors; connect the camera with a USB-C to USB-A cable.
+- A current-limited load switch (about 0.5 A) on VBUS is a good idea in a finished grip.
+
+On the camera, set USB to MTP/PTP.
 
 ## Pairing with the camera (Nikon ZR)
 
 1. On the camera: Network → Connect to computer, connection type **Camera Control**. Create a profile with **Direct connection to computer**. Each profile can be paired to one device, so use a new profile if this one is already paired to something else.
-2. Put the SSID and key the camera shows into `include/camera_wifi.h` (copied from `camera_wifi.example.h`), then build and flash.
+2. Add the camera to `CAMERA_WIFI_LIST` in `include/camera_wifi.h` (copied from `camera_wifi.example.h`): a name, the SSID and key the camera shows, and `192.168.1.1`. Then build and flash.
 3. The grip joins the camera's WiFi and shows a pairing code. If it matches the code on the camera, press any grip button.
 4. Confirm the grip on the camera. The grip reconnects and shows **Connected**.
 

@@ -4,7 +4,7 @@
 
 static const uint32_t POLL_MS = 500;
 
-void UsbLink::begin(const grip::CameraConfig&) {
+void UsbLink::begin() {
     if (!_session.begin()) {
         Serial.println("link: USB host failed to start");
         snprintf(_detail, sizeof(_detail), "USB host error");

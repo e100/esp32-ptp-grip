@@ -28,8 +28,10 @@ struct DisplayConfig {
     uint8_t sclPin;
 };
 
+// A camera the grip can join over WiFi. (Over USB nothing needs configuring.)
 struct CameraConfig {
-    const char* ssid;              // camera's WiFi network; empty = no camera (input only)
+    const char* name;              // for the display, e.g. "ZR"
+    const char* ssid;              // camera's WiFi network; empty = entry ignored
     const char* password;
     const char* host;              // camera's IP address on that network
 };

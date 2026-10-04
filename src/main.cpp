@@ -8,8 +8,8 @@
 //
 // Serial: 'v' toggle photo/video mode, 's' link status, 'p' pair,
 //         'y' accept pairing code, 'n' cancel pairing, 'o' list the values
-//         the camera offers, 'd' camera diagnostics, 'l' toggle library
-//         debug logging.
+//         the camera offers, 'a' dump all camera properties, 'd' camera
+//         diagnostics, 'l' toggle library debug logging.
 
 #include <Arduino.h>
 #include <ESP32Encoder.h>
@@ -18,6 +18,7 @@
 #include "BindingEngine.h"
 #include "CameraLink.h"
 #include "CameraControl.h"
+#include "PropDump.h"
 #include "InputFilters.h"
 #include "grip_config.h"
 
@@ -136,6 +137,7 @@ static void onSerial(char c) {
         case 'y': camLink.onButtonPress(); break;
         case 'n': camLink.cancel(); break;
         case 'o': printOptions(); break;
+        case 'a': dumpCameraProps(camera, Serial); break;
         case 'd': camera.dumpDiagnostics(Serial); break;
         case 'l':
             debugLog = !debugLog;

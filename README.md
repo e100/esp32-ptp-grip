@@ -53,7 +53,7 @@ make -C test/host test                    # run the input-logic tests on your co
 
 The current firmware pairs with the camera and shows each control's action on Serial and the OLED. It doesn't send those actions to the camera yet.
 
-Serial commands: `v` toggles photo/video mode, `s` shows the link status, `p` starts pairing, `y`/`n` accept or cancel a pairing code, `d` dumps camera diagnostics, `l` toggles library debug logging.
+Serial commands: `v` toggles photo/video mode, `s` shows the link status, `p` starts pairing, `y`/`n` accept or cancel a pairing code, `o` lists the values the camera offers for each setting, `a` dumps every camera property, `d` dumps camera diagnostics, `l` toggles library debug logging.
 
 ## Pairing with the camera (Nikon ZR)
 

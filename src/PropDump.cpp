@@ -117,6 +117,11 @@ static CameraResult dumpOne(NikonCamera& camera, uint16_t code, Print& out) {
     return CAM_OK;
 }
 
+void dumpCameraProp(NikonCamera& camera, uint16_t code, Print& out) {
+    CameraResult r = dumpOne(camera, code, out);
+    if (r != CAM_OK) out.printf("%04X: %s\n", code, cameraResultStr(r));
+}
+
 // Property codes tried by a full scan: standard properties and the Nikon
 // vendor range. DeviceInfo may not list everything (the ZR lists 21).
 struct CodeRange { uint16_t first, last; };

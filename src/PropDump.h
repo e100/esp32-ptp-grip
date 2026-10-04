@@ -11,5 +11,8 @@ void dumpCameraProps(NikonCamera& camera, Print& out, bool fullScan);
 // changed since the previous call, then take a new snapshot.
 void watchCameraProps(NikonCamera& camera, Print& out);
 
+// Print one property's line, as in the dump.
+void dumpCameraProp(NikonCamera& camera, uint16_t code, Print& out);
+
 // Print the DeviceInfo operation, event and property lists.
 void dumpDeviceInfo(NikonCamera& camera, Print& out);

@@ -10,7 +10,7 @@
 //         'y' accept pairing code, 'n' cancel pairing, 'o' list the values
 //         the camera offers, 'a' dump the listed camera properties, 'A' scan
 //         every property code, 'w' show properties changed since the last
-//         'w', 'e' toggle showing camera events, 'i' DeviceInfo, 'd' camera diagnostics,
+//         'w', 'x' write a property by code, 'e' toggle showing camera events, 'i' DeviceInfo, 'd' camera diagnostics,
 //         'l' toggle library debug logging (includes camera events).
 
 #include <Arduino.h>
@@ -127,6 +127,33 @@ static void printOptions() {
     }
 }
 
+// "x D0B5 6400": write a property by hex code and decimal value, then read it back.
+static void writeProperty() {
+    Serial.println("write: enter <hex code> <decimal value>, e.g. D0B5 6400");
+    Serial.setTimeout(30000);
+    String line = Serial.readStringUntil('\n');
+    line.trim();
+    char* end;
+    unsigned long code = strtoul(line.c_str(), &end, 16);
+    if (end == line.c_str() || code == 0 || code > 0xFFFF) {
+        Serial.printf("write: can't read a property code from '%s'\n", line.c_str());
+        return;
+    }
+    char* end2;
+    long value = strtol(end, &end2, 10);
+    if (end2 == end) {
+        Serial.printf("write: can't read a value from '%s'\n", line.c_str());
+        return;
+    }
+    Serial.print("before: ");
+    dumpCameraProp(camera, (uint16_t)code, Serial);
+    CameraResult r = camera.setPropertyRaw((uint16_t)code, (uint32_t)value);
+    Serial.printf("write %04lX = %ld: %s\n", code, value, cameraResultStr(r));
+    delay(300);
+    Serial.print("after:  ");
+    dumpCameraProp(camera, (uint16_t)code, Serial);
+}
+
 static void onSerial(char c) {
     switch (c) {
         case 'v':
@@ -148,6 +175,7 @@ static void onSerial(char c) {
         case 'A': dumpCameraProps(camera, Serial, true); break;
         case 'i': dumpDeviceInfo(camera, Serial); break;
         case 'w': watchCameraProps(camera, Serial); break;
+        case 'x': writeProperty(); break;
         case 'e':
             showEvents = !showEvents;
             Serial.printf("camera events %s\n", showEvents ? "shown" : "hidden");

@@ -10,7 +10,8 @@
 //         'p' pair, 'y' accept pairing code, 'n' cancel pairing, 'o' list the
 //         values the camera offers, 'a' dump the listed camera properties,
 //         'A' scan every property code, 'w' show properties changed since
-//         the last 'w', 'x' write a property by code, 'e' toggle showing
+//         the last 'w', 'x' write a property by code, 'r' send any PTP
+//         operation and show the reply, 'e' toggle showing
 //         camera events, 'i' DeviceInfo, 'g' Nikon vendor property codes,
 //         'd' camera diagnostics, 'l' toggle library debug logging.
 
@@ -155,6 +156,51 @@ static void writeProperty() {
     dumpCameraProp(camera, (uint32_t)code, Serial);
 }
 
+// "r 9435 1": send any PTP operation (hex opcode, up to 5 hex parameters) as a
+// data-in transaction and print the response code and any data received.
+static void rawOperation() {
+    Serial.println("raw: enter <hex opcode> [hex params...], e.g. 1014 1D0A5");
+    Serial.setTimeout(30000);
+    String line = Serial.readStringUntil('\n');
+    line.trim();
+    const char* p = line.c_str();
+    char* end;
+    unsigned long op = strtoul(p, &end, 16);
+    if (end == p || op == 0 || op > 0xFFFF) {
+        Serial.printf("raw: can't read an opcode from '%s'\n", line.c_str());
+        return;
+    }
+    uint32_t params[5];
+    uint8_t n = 0;
+    while (n < 5) {
+        p = end;
+        unsigned long v = strtoul(p, &end, 16);
+        if (end == p) break;
+        params[n++] = (uint32_t)v;
+    }
+    if (!camLink.connected()) {
+        Serial.println("raw: camera not connected");
+        return;
+    }
+    static uint8_t buf[4096];
+    size_t len = 0;
+    uint16_t response = 0;
+    bool ok = session.dataIn((uint16_t)op, params, n, buf, sizeof(buf), len, response);
+    Serial.printf("raw %04lX", op);
+    for (uint8_t i = 0; i < n; i++) Serial.printf(" %lX", (unsigned long)params[i]);
+    if (!ok) {
+        Serial.println(": transaction failed");
+        return;
+    }
+    Serial.printf(": response 0x%04X, %u data bytes\n", response, (unsigned)len);
+    size_t shown = len < 512 ? len : 512;
+    for (size_t i = 0; i < shown; i++) {
+        if (i % 16 == 0) Serial.printf("%s  %04X:", i ? "\n" : "", (unsigned)i);
+        Serial.printf(" %02X", buf[i]);
+    }
+    if (shown) Serial.println(len > shown ? "\n  ..." : "");
+}
+
 static void onSerial(char c) {
     switch (c) {
         case 'v':
@@ -178,6 +224,7 @@ static void onSerial(char c) {
         case 'g': dumpVendorCodes(camera, Serial); break;
         case 'w': watchCameraProps(camera, Serial); break;
         case 'x': writeProperty(); break;
+        case 'r': rawOperation(); break;
         case 'e':
             showEvents = !showEvents;
             Serial.printf("camera events %s\n", showEvents ? "shown" : "hidden");

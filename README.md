@@ -63,6 +63,19 @@ Serial commands: `f` autofocuses, `t` presses the shutter (a picture in photo mo
 
 `tools/ptpdecode.py capture.pcapng` decodes PTP/IP traffic from a Wireshark capture (e.g. of NX Tether talking to the camera), to find which operations and properties another app uses.
 
+## Camera over USB (experimental)
+
+The `esp32s3-usb` build talks to the camera over USB instead of WiFi. The S3's native USB pins (GPIO 19/20) become a USB host, so:
+
+- **Console and uploads move to the UART port** ("COM" on most boards): `pio run -e esp32s3-usb -t upload && pio device monitor -e esp32s3-usb`.
+- **The camera port must supply 5 V** and look like an ordinary 500 mA host port, so the camera doesn't try to charge from it (a ZR draws about 25 mA from such a port):
+  - **USB-A socket breakout:** GPIO 19 → D−, GPIO 20 → D+, 5V → VBUS, GND → GND. Connect the camera with a USB-C to USB-A cable (it contains the resistor that tells the camera what the port offers).
+  - **USB-C socket breakout:** as above, plus a 56 kΩ resistor from each CC pin to 5 V. Remove any 5.1 kΩ resistors the breakout has on CC. Then use a USB-C to USB-C cable.
+  - Check that the board's 5V pin really carries 5 V when powered from the COM port.
+- **Camera:** set USB to MTP/PTP. No pairing is needed over USB.
+
+Everything that works over WiFi uses the same camera code over USB. Tested with a Nikon ZR. When uploading from VS Code, pick the `esp32s3-usb` environment: the default one is the WiFi build.
+
 ## Pairing with the camera (Nikon ZR)
 
 1. On the camera: Network → Connect to computer, connection type **Camera Control**. Create a profile with **Direct connection to computer**. Each profile can be paired to one device, so use a new profile if this one is already paired to something else.

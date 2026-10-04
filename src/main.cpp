@@ -2,7 +2,8 @@
 //
 // Reads the encoders and buttons from include/grip_config.h, runs them through
 // the binding engine, and shows the resulting commands on Serial and the OLED.
-// Joins the camera's WiFi and pairs with it (see CameraLink.h). Encoder steps
+// Joins the camera's WiFi and pairs with it (see CameraLink.h), or with
+// GRIP_CAMERA_USB talks to it over the native USB port (UsbLink.h). Encoder steps
 // change the camera's settings (CameraControl.h); the shutter button focuses
 // and shoots, REC starts/stops movies. Photo/video mode follows the camera's switch.
 //
@@ -24,6 +25,7 @@
 #include <PtpIpCamera.h>
 #include "BindingEngine.h"
 #include "CameraLink.h"
+#include "UsbLink.h"
 #include "CameraControl.h"
 #include "PropDump.h"
 #include "InputFilters.h"
@@ -47,10 +49,16 @@ static BindingEngine engine(config::BINDINGS, COUNT(config::BINDINGS),
 static U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C display(U8G2_R0, U8X8_PIN_NONE,
                                                        config::OLED.sclPin, config::OLED.sdaPin);
 
+#ifdef GRIP_CAMERA_USB
+static PtpUsbSession  session;
+using Link = UsbLink;
+#else
 static PtpIpTransport transport;
 static PtpIpSession   session(transport);
+using Link = CameraLink;
+#endif
 static NikonCamera    camera(session);
-static CameraLink     camLink(camera, session);
+static Link           camLink(camera, session);
 static CameraControl  control(camera);
 static bool           debugLog = false;
 static bool           showEvents = false;
@@ -79,7 +87,7 @@ static void redraw() {
     if (!config::OLED.enabled) return;
     const char* top = lastLine;
     char status[32];
-    if (camLink.connected() || camLink.state() == CameraLink::State::Disabled) {
+    if (camLink.connected() || camLink.state() == Link::State::Disabled) {
         snprintf(status, sizeof(status), "%s L%u  %s%s",
                  control.recording() ? "*REC*" : engine.cameraMode() == CameraMode::Photo ? "PHOTO" : "VIDEO",
                  engine.activeLayer(), settingName(engine.selected()),

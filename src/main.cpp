@@ -7,7 +7,8 @@
 // reach the camera yet. Photo/video mode follows the camera's switch.
 //
 // Serial: 'v' toggle photo/video mode (no camera only), 's' link status,
-//         'p' pair, 'y' accept pairing code, 'n' cancel pairing, 'o' list the
+//         'p' pair, 'b' toggle base ISO (video),
+//         'h' toggle shutter speed/angle (video), 'y' accept pairing code, 'n' cancel pairing, 'o' list the
 //         values the camera offers, 'a' dump the listed camera properties,
 //         'A' scan every property code, 'w' show properties changed since
 //         the last 'w', 'x' write a property by code, 'r' send any PTP
@@ -63,6 +64,8 @@ static void describe(const Command& c, char* buf, size_t len) {
         case CommandType::SelectionChanged: snprintf(buf, len, "sel %s", settingName(c.setting)); break;
         case CommandType::LayerChanged:     snprintf(buf, len, "layer %d", c.delta); break;
         case CommandType::LockChanged:      snprintf(buf, len, "%s", c.on ? "LOCKED" : "unlocked"); break;
+        case CommandType::BaseIsoToggle:    snprintf(buf, len, "base ISO"); break;
+        case CommandType::ShutterModeToggle: snprintf(buf, len, "shutter mode"); break;
     }
 }
 
@@ -98,7 +101,7 @@ static void onPropChanged(CameraProperty prop, uint32_t value, void*) {
     Setting s;
     if (!CameraControl::settingFor(prop, s)) return;
     int32_t v = prop == CameraProperty::EXPOSURE_COMPENSATION ? (int16_t)value : (int32_t)value;
-    CameraControl::format(s, v, camera.movieMode(), lastLine, sizeof(lastLine));
+    CameraControl::format(s, v, camera, lastLine, sizeof(lastLine));
     Serial.printf("camera: %s\n", lastLine);
     redraw();
 }
@@ -116,7 +119,7 @@ static void printOptions() {
             continue;
         }
         char cur[24];
-        CameraControl::format(s, o.current, camera.movieMode(), cur, sizeof(cur));
+        CameraControl::format(s, o.current, camera, cur, sizeof(cur));
         Serial.printf("%-8s now %s (%ld), %s", settingName(s), cur, (long)o.current,
                       o.writable ? "writable" : "read-only");
         if (o.form == NikonPropOptions::Form::Range) {
@@ -233,6 +236,8 @@ static void onSerial(char c) {
         case 'g': dumpVendorCodes(camera, Serial); break;
         case 'w': watchCameraProps(camera, Serial); break;
         case 'x': writeProperty(); break;
+        case 'b': control.toggleBaseIso(); break;
+        case 'h': control.toggleShutterMode(); break;
         case 'r': rawOperation(); break;
         case 'e':
             showEvents = !showEvents;
@@ -249,6 +254,8 @@ static void onSerial(char c) {
 static void handle(const Command* cmds, size_t n) {
     for (size_t i = 0; i < n; i++) {
         if (cmds[i].type == CommandType::StepSetting) control.step(cmds[i].setting, cmds[i].delta);
+        if (cmds[i].type == CommandType::BaseIsoToggle) control.toggleBaseIso();
+        if (cmds[i].type == CommandType::ShutterModeToggle) control.toggleShutterMode();
         describe(cmds[i], lastLine, sizeof(lastLine));
         Serial.println(lastLine);
     }

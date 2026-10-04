@@ -139,6 +139,12 @@ size_t BindingEngine::_fire(const Action& a, bool on, int16_t detents, Command* 
             out[0] = Command{ CommandType::LockChanged, Setting::ISO, 0, _locked };
             return 1;
         }
+        case ActionType::BaseIsoToggle:
+            out[0] = Command{ CommandType::BaseIsoToggle, Setting::ISO, 0, true };
+            return 1;
+        case ActionType::ShutterModeToggle:
+            out[0] = Command{ CommandType::ShutterModeToggle, Setting::ISO, 0, true };
+            return 1;
         case ActionType::None:
             return 0;
     }

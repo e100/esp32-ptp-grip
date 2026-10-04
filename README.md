@@ -36,7 +36,7 @@ Examples:
 { button(5),  Trigger::Hold,  MODE_ANY,   LAYER_ANY, lock() },
 ```
 
-Available actions: `adjust(setting)`, `adjustSelected()`, `selectNext()`, `selectPrev()`, `shutterHalf()`, `shutterFull()`, `recordToggle()`, `layerHold(n)`, `layerNext()`, `lock()`, `lockToggle()`.
+Available actions: `adjust(setting)`, `adjustSelected()`, `selectNext()`, `selectPrev()`, `shutterHalf()`, `shutterFull()`, `recordToggle()`, `layerHold(n)`, `layerNext()`, `lock()`, `lockToggle()`, `baseIsoToggle()`, `shutterModeToggle()`.
 
 While locked, only record and unlock work. Releasing a button that was already held still goes through, so a held shutter is never left pressed.
 
@@ -55,7 +55,11 @@ The current firmware pairs with the camera and shows each control's action on Se
 
 Photo/video mode follows the camera's switch, and the encoders adjust the video exposure settings in video mode.
 
-Serial commands: `v` toggles photo/video mode when no camera is connected, `s` shows the link status, `p` starts pairing, `y`/`n` accept or cancel a pairing code, `o` lists the values the camera offers for each setting, `a` dumps the camera's properties (`A` scans every property code), `i` shows what the camera says it supports, `g` lists Nikon's vendor property codes, `w` shows which properties changed since the last `w`, `e` shows the camera's events, `x` writes a property by its code (for experiments), `r` sends any PTP operation and prints the reply, `d` dumps camera diagnostics, `l` toggles library debug logging.
+**Shutter mode (ZR, video):** the `shutterModeToggle()` action, or `h` over Serial, switches the video shutter between speed and angle. In angle mode the shutter control steps through the camera's angles (5.6 to 360 degrees), shown as `180 deg`.
+
+**Dual base ISO (ZR, video):** Fn + wheel push (`baseIsoToggle()`, or `b` over Serial) switches base ISO between Low and High. With `BASE_ISO_SET_NATIVE` (in `grip_config.h`) the grip also sets ISO to that base's native value, 800 for Low or 6400 for High by default. In video mode the ISO display shows the base (`L` or `H`) and marks the native ISO with `*`, for example `ISO 6400 H*`.
+
+Serial commands: `v` toggles photo/video mode when no camera is connected, `h` switches the video shutter between speed and angle, `b` switches base ISO (video), `s` shows the link status, `p` starts pairing, `y`/`n` accept or cancel a pairing code, `o` lists the values the camera offers for each setting, `a` dumps the camera's properties (`A` scans every property code), `i` shows what the camera says it supports, `g` lists Nikon's vendor property codes, `w` shows which properties changed since the last `w`, `e` shows the camera's events, `x` writes a property by its code (for experiments), `r` sends any PTP operation and prints the reply, `d` dumps camera diagnostics, `l` toggles library debug logging.
 
 `tools/ptpdecode.py capture.pcapng` decodes PTP/IP traffic from a Wireshark capture (e.g. of NX Tether talking to the camera), to find which operations and properties another app uses.
 

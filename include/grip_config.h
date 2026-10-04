@@ -69,6 +69,9 @@ static const Binding BINDINGS[] = {
     // Dedicated REC button (works even when locked)
     { button(2),   Trigger::Short, MODE_ANY,   LAYER_ANY, recordToggle() },
 
+    // Fn + wheel push in video: switch base ISO Low/High (ZR dual base ISO)
+    { button(3),   Trigger::Short, MODE_VIDEO, layer(1),  baseIsoToggle() },
+
     // Wheel push: next setting; long press: lock / unlock the controls
     { button(3),   Trigger::Short, MODE_ANY,   LAYER_ANY, selectNext() },
     { button(3),   Trigger::Long,  MODE_ANY,   LAYER_ANY, lockToggle() },
@@ -78,6 +81,13 @@ static const Binding BINDINGS[] = {
 
     // A lock slide switch would be: { button(n), Trigger::Hold, MODE_ANY, LAYER_ANY, lock() },
 };
+
+// Dual base ISO (ZR video). Switching base also sets ISO to that base's
+// native value when BASE_ISO_SET_NATIVE is true. The display marks the
+// native ISO with '*'.
+static const bool     BASE_ISO_SET_NATIVE = true;
+static const uint32_t BASE_ISO_LOW_NATIVE  = 800;
+static const uint32_t BASE_ISO_HIGH_NATIVE = 6400;
 
 static const Setting PHOTO_SETTINGS[] = {
     Setting::Shutter, Setting::Aperture, Setting::ISO, Setting::ExposureComp, Setting::WhiteBalance,

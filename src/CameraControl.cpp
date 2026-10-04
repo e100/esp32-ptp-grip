@@ -1,4 +1,5 @@
 #include "CameraControl.h"
+#include "grip_config.h"
 #include <math.h>
 #include <stdarg.h>
 
@@ -30,6 +31,16 @@ void CameraControl::step(Setting s, int16_t delta) {
 }
 
 void CameraControl::update(bool connected) {
+    if (_baseIsoToggle) {
+        _baseIsoToggle = false;
+        if (connected) _applyBaseIsoToggle();
+        return;
+    }
+    if (_shutterModeToggle) {
+        _shutterModeToggle = false;
+        if (connected) _applyShutterModeToggle();
+        return;
+    }
     for (size_t i = 0; i < (size_t)Setting::COUNT; i++) {
         if (_pending[i] == 0) continue;
         int16_t delta = _pending[i];
@@ -81,9 +92,8 @@ void CameraControl::_apply(Setting s, int16_t delta) {
     }
 
     char text[24];
-    bool movie = _camera.movieMode();
     if (target == o.current) {                 // already at the end of the list
-        format(s, o.current, movie, text, sizeof(text));
+        _formatValue(s, o.current, text, sizeof(text));
         _say("%s", text);
         return;
     }
@@ -93,8 +103,77 @@ void CameraControl::_apply(Setting s, int16_t delta) {
         _say("%s: %s", name, cameraResultStr(r));
         return;
     }
-    format(s, target, movie, text, sizeof(text));
+    _formatValue(s, target, text, sizeof(text));
     _say("%s", text);
+}
+
+void CameraControl::_formatValue(Setting s, int32_t value, char* buf, size_t len) {
+    uint8_t base = 0;
+    if (s != Setting::ISO || !_camera.movieMode() || _camera.getMovieBaseIso(base) != CAM_OK) {
+        format(s, value, _camera, buf, len);
+        return;
+    }
+    bool high = base == NikonCamera::NIKON_BASE_ISO_HIGH;
+    uint32_t native = high ? grip::config::BASE_ISO_HIGH_NATIVE : grip::config::BASE_ISO_LOW_NATIVE;
+    snprintf(buf, len, "ISO %ld %c%s", (long)value, high ? 'H' : 'L', (uint32_t)value == native ? "*" : "");
+}
+
+void CameraControl::_applyBaseIsoToggle() {
+    if (!_camera.movieMode()) {
+        _say("Base ISO: video");
+        return;
+    }
+    uint8_t base = 0;
+    CameraResult r = _camera.getMovieBaseIso(base);
+    bool toHigh = base != NikonCamera::NIKON_BASE_ISO_HIGH;
+    if (r == CAM_OK) {
+        r = _camera.setMovieBaseIso(toHigh ? NikonCamera::NIKON_BASE_ISO_HIGH : NikonCamera::NIKON_BASE_ISO_LOW);
+    }
+    if (r != CAM_OK) {
+        Serial.printf("cam: base ISO: %s\n", cameraResultStr(r));
+        _say("Base ISO: %s", cameraResultStr(r));
+        return;
+    }
+    Serial.printf("cam: base ISO %s\n", toHigh ? "High" : "Low");
+
+    if (grip::config::BASE_ISO_SET_NATIVE) {
+        uint32_t native = toHigh ? grip::config::BASE_ISO_HIGH_NATIVE : grip::config::BASE_ISO_LOW_NATIVE;
+        r = _camera.setCameraProperty(CameraProperty::ISO, native);
+        if (r == CAM_E_INVALID_ARG) {          // the new range may not be in place yet
+            delay(200);
+            r = _camera.setCameraProperty(CameraProperty::ISO, native);
+        }
+        if (r == CAM_OK) {
+            char text[24];
+            _formatValue(Setting::ISO, (int32_t)native, text, sizeof(text));
+            _say("%s", text);
+            return;
+        }
+        // The base switched; the native ISO isn't offered (e.g. a different value range)
+        Serial.printf("cam: set ISO %lu after base change: %s\n", (unsigned long)native, cameraResultStr(r));
+    }
+    _say("Base %s", toHigh ? "HIGH" : "LOW");
+}
+
+void CameraControl::_applyShutterModeToggle() {
+    if (!_camera.movieMode()) {
+        _say("Shutter mode: video");
+        return;
+    }
+    uint8_t mode = 0;
+    CameraResult r = _camera.getMovieShutterMode(mode);
+    if (r == CAM_OK) {
+        bool toAngle = mode != NikonCamera::NIKON_SHUTTER_MODE_ANGLE;
+        r = _camera.setMovieShutterMode(toAngle ? NikonCamera::NIKON_SHUTTER_MODE_ANGLE
+                                                : NikonCamera::NIKON_SHUTTER_MODE_SPEED);
+        if (r == CAM_OK) {
+            Serial.printf("cam: shutter mode %s\n", toAngle ? "angle" : "speed");
+            _say("Shutter %s", toAngle ? "ANGLE" : "SPEED");
+            return;
+        }
+    }
+    Serial.printf("cam: shutter mode: %s\n", cameraResultStr(r));
+    _say("Shutter mode: %s", cameraResultStr(r));
 }
 
 void CameraControl::_say(const char* fmt, ...) {
@@ -144,12 +223,18 @@ static unsigned nominalDenominator(uint32_t t) {
     return best;
 }
 
-void CameraControl::format(Setting s, int32_t value, bool movie, char* buf, size_t len) {
+void CameraControl::format(Setting s, int32_t value, const NikonCamera& camera, char* buf, size_t len) {
+    bool movie = camera.movieMode();
     switch (s) {
         case Setting::ISO:
             snprintf(buf, len, "ISO %ld", (long)value);
             break;
         case Setting::Shutter: {
+            if (camera.movieShutterAngle()) {         // degrees * 100
+                if (value % 100 == 0) snprintf(buf, len, "%ld deg", (long)(value / 100));
+                else                  snprintf(buf, len, "%.1f deg", value / 100.0);
+                break;
+            }
             if (movie) {                              // numerator << 16 | denominator
                 uint32_t num = (uint32_t)value >> 16, den = (uint32_t)value & 0xFFFF;
                 if (den == 0 || num == 0) snprintf(buf, len, "Shutter --");

@@ -206,6 +206,22 @@ static void testEncoderFilter() {
     CHECK(r.update(4) == -2);
 }
 
+static void testBaseIsoToggle() {
+    printf("Fn + wheel push toggles base ISO in video only\n");
+    BindingEngine e = makeDefault();
+    Command c[BindingEngine::MAX_COMMANDS];
+
+    e.setCameraMode(CameraMode::Video);
+    e.onButton(FN, ButtonEvent::Down, c);
+    CHECK(e.onButton(PUSH, ButtonEvent::Short, c) == 1 && c[0].type == CommandType::BaseIsoToggle);
+    e.onButton(FN, ButtonEvent::Up, c);
+    CHECK(e.onButton(PUSH, ButtonEvent::Short, c) == 1 && c[0].type == CommandType::SelectionChanged);
+
+    e.setCameraMode(CameraMode::Photo);
+    e.onButton(FN, ButtonEvent::Down, c);
+    CHECK(e.onButton(PUSH, ButtonEvent::Short, c) == 1 && c[0].type == CommandType::SelectionChanged);
+}
+
 int main() {
     testFixedAndSelectedEncoders();
     testLayerHold();
@@ -215,6 +231,7 @@ int main() {
     testLockToggle();
     testLockSwitch();
     testLayerNextAndUnbound();
+    testBaseIsoToggle();
     testButtonFilter();
     testEncoderFilter();
     printf("\n%d checks, %d failed\n", g_checks, g_fails);

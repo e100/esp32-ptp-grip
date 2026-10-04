@@ -80,7 +80,9 @@ enum class ActionType : uint8_t {
     LayerNext,       // Short/Long: cycle to the next layer
     LayerHold,       // Hold: use layer `arg` while held
     Lock,            // Hold: controls locked while held (e.g. a slide switch)
-    LockToggle       // Short/Long: lock / unlock
+    LockToggle,      // Short/Long: lock / unlock
+    BaseIsoToggle,   // Short/Long: switch the camera's dual base ISO (Low/High)
+    ShutterModeToggle // Short/Long: switch video shutter between speed and angle
 };
 
 struct Action {
@@ -100,6 +102,8 @@ constexpr Action layerNext()          { return Action{ ActionType::LayerNext, Se
 constexpr Action layerHold(uint8_t n) { return Action{ ActionType::LayerHold, Setting::ISO, n }; }
 constexpr Action lock()               { return Action{ ActionType::Lock, Setting::ISO, 0 }; }
 constexpr Action lockToggle()         { return Action{ ActionType::LockToggle, Setting::ISO, 0 }; }
+constexpr Action baseIsoToggle()      { return Action{ ActionType::BaseIsoToggle, Setting::ISO, 0 }; }
+constexpr Action shutterModeToggle()  { return Action{ ActionType::ShutterModeToggle, Setting::ISO, 0 }; }
 
 // One row of the binding table. The first row that matches an input event wins,
 // so list specific rows (one mode / one layer) before general ones.
@@ -122,7 +126,9 @@ enum class CommandType : uint8_t {
     RecordToggle,
     SelectionChanged, // setting = newly selected (for the display)
     LayerChanged,     // delta = new layer number (for the display)
-    LockChanged       // on = locked
+    LockChanged,      // on = locked
+    BaseIsoToggle,    // switch dual base ISO Low <-> High
+    ShutterModeToggle // switch video shutter speed <-> angle
 };
 
 struct Command {

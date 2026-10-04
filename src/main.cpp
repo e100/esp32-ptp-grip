@@ -9,7 +9,8 @@
 // Serial: 'v' toggle photo/video mode (no camera only), 's' link status, 'p' pair,
 //         'y' accept pairing code, 'n' cancel pairing, 'o' list the values
 //         the camera offers, 'a' dump the listed camera properties, 'A' scan
-//         every property code, 'i' DeviceInfo, 'd' camera diagnostics,
+//         every property code, 'w' show properties changed since the last
+//         'w', 'e' toggle showing camera events, 'i' DeviceInfo, 'd' camera diagnostics,
 //         'l' toggle library debug logging (includes camera events).
 
 #include <Arduino.h>
@@ -47,6 +48,7 @@ static NikonCamera    camera(session);
 static CameraLink     camLink(camera, session);
 static CameraControl  control(camera);
 static bool           debugLog = false;
+static bool           showEvents = false;
 
 static char lastLine[24] = "ready";
 
@@ -86,7 +88,7 @@ static void redraw() {
 }
 
 static void onLibraryLog(uint8_t level, const char* msg) {
-    if (level >= PTPIP_LOG_INFO || debugLog) Serial.println(msg);
+    if (level >= PTPIP_LOG_INFO || debugLog || (showEvents && strstr(msg, "] event "))) Serial.println(msg);
 }
 
 // A setting changed on the camera itself (dial, menu) — show it.
@@ -145,6 +147,11 @@ static void onSerial(char c) {
         case 'a': dumpCameraProps(camera, Serial, false); break;
         case 'A': dumpCameraProps(camera, Serial, true); break;
         case 'i': dumpDeviceInfo(camera, Serial); break;
+        case 'w': watchCameraProps(camera, Serial); break;
+        case 'e':
+            showEvents = !showEvents;
+            Serial.printf("camera events %s\n", showEvents ? "shown" : "hidden");
+            break;
         case 'd': camera.dumpDiagnostics(Serial); break;
         case 'l':
             debugLog = !debugLog;

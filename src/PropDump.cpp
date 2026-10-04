@@ -117,15 +117,23 @@ static CameraResult dumpOne(NikonCamera& camera, uint16_t code, Print& out) {
     return CAM_OK;
 }
 
-// Scan state shared by the two loops below
+// Property codes tried by a full scan: standard properties and the Nikon
+// vendor range. DeviceInfo may not list everything (the ZR lists 21).
+struct CodeRange { uint16_t first, last; };
+static const CodeRange SCAN_RANGES[] = { { 0x5001, 0x5030 }, { 0xD000, 0xD7FF } };
+
+using VisitFn = CameraResult (*)(NikonCamera& camera, uint16_t code, Print& out);
+
+// Scan state shared by the loops below
 struct Scan {
     NikonCamera& camera;
     Print&       out;
+    VisitFn      fn;
     unsigned     found = 0;
     uint8_t      failures = 0;   // consecutive transport failures
     uint32_t     lastPoll = 0;
 
-    Scan(NikonCamera& c, Print& o) : camera(c), out(o), lastPoll(millis()) {}
+    Scan(NikonCamera& c, Print& o, VisitFn f) : camera(c), out(o), fn(f), lastPoll(millis()) {}
 
     // Returns false to stop: the connection looks dead.
     bool visit(uint16_t code) {
@@ -134,7 +142,7 @@ struct Scan {
             camera.poll();
             lastPoll = millis();
         }
-        CameraResult r = dumpOne(camera, code, out);
+        CameraResult r = fn(camera, code, out);
         if (r == CAM_OK) found++;
         failures = (r == CAM_E_PROTOCOL || r == CAM_E_TIMEOUT) ? failures + 1 : 0;
         if (failures >= 3 || !camera.isReady()) {
@@ -142,6 +150,16 @@ struct Scan {
             return false;
         }
         return true;
+    }
+
+    void scanRanges() {
+        out.print("scanning");
+        for (const CodeRange& r : SCAN_RANGES) out.printf(" %04X-%04X", r.first, r.last);
+        out.println(" (may take a while)");
+        bool ok = true;
+        for (const CodeRange& r : SCAN_RANGES) {
+            for (uint32_t code = r.first; ok && code <= r.last; code++) ok = visit((uint16_t)code);
+        }
     }
 };
 
@@ -172,7 +190,7 @@ void dumpCameraProps(NikonCamera& camera, Print& out, bool fullScan) {
     }
     const PtpDeviceInfo& info = camera.deviceInfo();
     uint32_t start = millis();
-    Scan scan(camera, out);
+    Scan scan(camera, out, dumpOne);
     out.println("=== property dump begin ===");
 
     if (info.numProperties > 0 && !fullScan) {
@@ -181,12 +199,94 @@ void dumpCameraProps(NikonCamera& camera, Print& out, bool fullScan) {
             if (!scan.visit(info.properties[i])) break;
         }
     } else {
-        // DeviceInfo may not list everything, so try every likely code:
-        // standard properties 0x5001-0x5030 and vendor properties 0xD000-0xD3FF.
-        out.println("scanning 5001-5030 and D000-D3FF (may take a while)");
-        bool ok = true;
-        for (uint32_t code = 0x5001; ok && code <= 0x5030; code++) ok = scan.visit((uint16_t)code);
-        for (uint32_t code = 0xD000; ok && code <= 0xD3FF; code++) ok = scan.visit((uint16_t)code);
+        scan.scanRanges();
     }
     out.printf("=== property dump end: %u properties, %lu ms ===\n", scan.found, (unsigned long)(millis() - start));
+}
+
+// ----------------------------------------------------------------------------
+// Watch: snapshot every property's description, and on the next run print the
+// ones that changed. Codes are visited in ascending order, so the previous
+// snapshot is walked alongside.
+// ----------------------------------------------------------------------------
+
+static constexpr size_t   WATCH_MAX = 768;
+static uint16_t watchCodes[2][WATCH_MAX];
+static uint32_t watchHashes[2][WATCH_MAX];
+static size_t   watchCount[2];
+static uint8_t  watchCur;          // snapshot being built; the other is the previous one
+static size_t   watchPrevPos;
+static bool     watchHavePrev;
+static unsigned watchChanges;
+
+static uint32_t fnv1a(const uint8_t* d, size_t n) {
+    uint32_t h = 2166136261u;
+    for (size_t i = 0; i < n; i++) h = (h ^ d[i]) * 16777619u;
+    return h;
+}
+
+static CameraResult watchOne(NikonCamera& camera, uint16_t code, Print& out) {
+    const uint8_t* d;
+    size_t len;
+    CameraResult r = camera.readPropDesc(code, d, len);
+    if (r != CAM_OK) return r;
+    uint32_t h = fnv1a(d, len);
+
+    uint8_t prev = watchCur ^ 1;
+    const char* tag = nullptr;
+    if (watchHavePrev) {
+        // Codes in the previous snapshot below this one have disappeared
+        while (watchPrevPos < watchCount[prev] && watchCodes[prev][watchPrevPos] < code) {
+            out.printf("gone    %04X\n", watchCodes[prev][watchPrevPos++]);
+            watchChanges++;
+        }
+        if (watchPrevPos < watchCount[prev] && watchCodes[prev][watchPrevPos] == code) {
+            if (watchHashes[prev][watchPrevPos] != h) tag = "changed ";
+            watchPrevPos++;
+        } else {
+            tag = "new     ";
+        }
+    }
+    size_t& n = watchCount[watchCur];
+    if (n < WATCH_MAX) {
+        watchCodes[watchCur][n] = code;
+        watchHashes[watchCur][n] = h;
+        n++;
+    }
+    if (tag) {
+        out.print(tag);
+        dumpOne(camera, code, out);     // reads it again to print it
+        watchChanges++;
+    }
+    return CAM_OK;
+}
+
+void watchCameraProps(NikonCamera& camera, Print& out) {
+    if (!camera.isReady()) {
+        out.println("watch: camera not connected");
+        return;
+    }
+    uint32_t start = millis();
+    watchCount[watchCur] = 0;
+    watchPrevPos = 0;
+    watchChanges = 0;
+    out.println(watchHavePrev ? "=== watch: changes since the last snapshot ===" : "=== watch: taking a first snapshot ===");
+
+    Scan scan(camera, out, watchOne);
+    scan.scanRanges();
+
+    if (watchHavePrev) {
+        uint8_t prev = watchCur ^ 1;
+        while (watchPrevPos < watchCount[prev]) {
+            out.printf("gone    %04X\n", watchCodes[prev][watchPrevPos++]);
+            watchChanges++;
+        }
+        out.printf("=== watch end: %u changes among %u properties, %lu ms ===\n", watchChanges,
+                   (unsigned)watchCount[watchCur], (unsigned long)(millis() - start));
+    } else {
+        out.printf("=== watch end: %u properties saved; change something, then send 'w' again ===\n",
+                   (unsigned)watchCount[watchCur]);
+    }
+    watchHavePrev = true;
+    watchCur ^= 1;
 }

@@ -57,6 +57,8 @@ Photo/video mode follows the camera's switch, and the encoders adjust the video 
 
 Serial commands: `v` toggles photo/video mode when no camera is connected, `s` shows the link status, `p` starts pairing, `y`/`n` accept or cancel a pairing code, `o` lists the values the camera offers for each setting, `a` dumps the camera's properties (`A` scans every property code), `i` shows what the camera says it supports, `g` lists Nikon's vendor property codes, `w` shows which properties changed since the last `w`, `e` shows the camera's events, `x` writes a property by its code (for experiments), `r` sends any PTP operation and prints the reply, `d` dumps camera diagnostics, `l` toggles library debug logging.
 
+`tools/ptpdecode.py capture.pcapng` decodes PTP/IP traffic from a Wireshark capture (e.g. of NX Tether talking to the camera), to find which operations and properties another app uses.
+
 ## Pairing with the camera (Nikon ZR)
 
 1. On the camera: Network → Connect to computer, connection type **Camera Control**. Create a profile with **Direct connection to computer**. Each profile can be paired to one device, so use a new profile if this one is already paired to something else.

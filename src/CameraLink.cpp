@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include <Preferences.h>
+#include <string.h>
 
 static const char*    HOST_NAME          = "ptp-grip";  // sent in the PTP/IP handshake and mDNS
 static const uint32_t WIFI_RETRY_MS      = 20000;       // restart WiFi.begin() if not joined by then
@@ -46,7 +47,12 @@ void CameraLink::_set(State s, uint32_t now) {
     _changed = true;
 }
 
+// Back off on repeated failures (x2 each time, up to 30 s), so a camera that
+// is already in trouble isn't hit with a new connection every few seconds.
 void CameraLink::_retry(uint32_t now, uint32_t afterMs, const char* why) {
+    if (_failures < 8) _failures++;
+    for (uint8_t i = 1; i < _failures && afterMs < 30000; i++) afterMs *= 2;
+    if (afterMs > 30000) afterMs = 30000;
     Serial.printf("link: %s, retrying in %us\n", why, (unsigned)(afterMs / 1000));
     snprintf(_detail, sizeof(_detail), "%s", why);
     _retryAt = now + afterMs;
@@ -169,6 +175,7 @@ void CameraLink::_connect(uint32_t now) {
         Serial.printf("link: connected to %s %s\n", info.manufacturer, info.model);
         snprintf(_detail, sizeof(_detail), "%.23s", info.model);
         _reconnectUntil = 0;
+        _failures = 0;
         _lastPoll = now;
         _set(State::Connected, now);
         return;
@@ -227,8 +234,24 @@ void CameraLink::cancel() {
     if (_state != State::ShowingCode && _state != State::ConfirmOnCamera) return;
     _camera.cancelPairing();
     _forcePair = false;
+    _detail[0] = '\0';
     Serial.println("link: pairing cancelled. Press a button (or send 'p') to start again");
     _set(State::Stopped, millis());
+}
+
+void CameraLink::disconnect() {
+    if (_state == State::Disabled) return;
+    if (_state == State::ShowingCode || _state == State::ConfirmOnCamera) _camera.cancelPairing();
+    else if (_state == State::Connected) _camera.end();
+    Serial.println("link: disconnected. Send 'c' or press a button to reconnect");
+    snprintf(_detail, sizeof(_detail), "disconnected");
+    _set(State::Stopped, millis());
+}
+
+void CameraLink::connect() {
+    if (_state != State::Stopped) return;
+    _failures = 0;
+    _set(State::Finding, millis());
 }
 
 void CameraLink::forcePair() {
@@ -260,7 +283,7 @@ const char* CameraLink::headline() const {
         case State::ConfirmOnCamera: return "OK on camera";
         case State::Connected:       return "Connected";
         case State::OtherHost:       return "Cam taken";
-        case State::Stopped:         return "Not paired";
+        case State::Stopped:         return strcmp(_detail, "disconnected") == 0 ? "Disconnected" : "Not paired";
         case State::Waiting:         return "Retrying";
     }
     return "";

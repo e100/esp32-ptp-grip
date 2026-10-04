@@ -19,8 +19,8 @@ static BindingEngine makeDefault() {
 }
 
 // Default config indices: encoder(0) wheel, encoder(1) ISO dial;
-// button(0) half, (1) full, (2) rec, (3) wheel push, (4) fn.
-enum { HALF = 0, FULL = 1, REC = 2, PUSH = 3, FN = 4 };
+// button(0) half, (1) full, (2) rec, (3) wheel push, (4) fn, (5) ISO dial push.
+enum { HALF = 0, FULL = 1, REC = 2, PUSH = 3, FN = 4, ISOPUSH = 5 };
 
 static void testFixedAndSelectedEncoders() {
     printf("encoder bound to a fixed setting vs. the selected setting\n");
@@ -207,19 +207,19 @@ static void testEncoderFilter() {
 }
 
 static void testBaseIsoToggle() {
-    printf("Fn + wheel push toggles base ISO in video only\n");
+    printf("ISO dial push toggles base ISO in video only\n");
     BindingEngine e = makeDefault();
     Command c[BindingEngine::MAX_COMMANDS];
 
     e.setCameraMode(CameraMode::Video);
-    e.onButton(FN, ButtonEvent::Down, c);
-    CHECK(e.onButton(PUSH, ButtonEvent::Short, c) == 1 && c[0].type == CommandType::BaseIsoToggle);
-    e.onButton(FN, ButtonEvent::Up, c);
+    CHECK(e.onButton(ISOPUSH, ButtonEvent::Short, c) == 1 && c[0].type == CommandType::BaseIsoToggle);
+    e.onButton(FN, ButtonEvent::Down, c);               // works on any layer
+    CHECK(e.onButton(ISOPUSH, ButtonEvent::Short, c) == 1 && c[0].type == CommandType::BaseIsoToggle);
     CHECK(e.onButton(PUSH, ButtonEvent::Short, c) == 1 && c[0].type == CommandType::SelectionChanged);
+    e.onButton(FN, ButtonEvent::Up, c);
 
     e.setCameraMode(CameraMode::Photo);
-    e.onButton(FN, ButtonEvent::Down, c);
-    CHECK(e.onButton(PUSH, ButtonEvent::Short, c) == 1 && c[0].type == CommandType::SelectionChanged);
+    CHECK(e.onButton(ISOPUSH, ButtonEvent::Short, c) == 0);   // unbound in photo mode
 }
 
 int main() {

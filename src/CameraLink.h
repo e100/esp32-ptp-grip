@@ -27,7 +27,7 @@ public:
         ConfirmOnCamera,// waiting for the user to confirm on the camera
         Connected,
         OtherHost,      // camera is paired with another device
-        Stopped,        // pairing cancelled or timed out; a button press retries
+        Stopped,        // pairing cancelled, or disconnect(); a button press or connect() retries
         Waiting,        // retry after an error
     };
 
@@ -42,6 +42,8 @@ public:
 
     void cancel();       // abandon pairing
     void forcePair();    // start pairing even if the camera says it is paired
+    void disconnect();   // close the session cleanly and stay disconnected (e.g. before reflashing)
+    void connect();      // reconnect after disconnect() or a cancelled pairing
     void printStatus(Print& out);
 
     State       state() const { return _state; }
@@ -73,6 +75,7 @@ private:
     uint32_t             _retryAt = 0;
     uint32_t             _lastPoll = 0;
     uint32_t             _reconnectUntil = 0; // after pairing: keep retrying begin() until then
+    uint8_t              _failures = 0;       // consecutive failed attempts, for retry back-off
     Advert               _advert = Advert::Unknown;
     bool                 _mdnsStarted = false;
     bool                 _forcePair = false;

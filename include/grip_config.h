@@ -36,8 +36,8 @@ static const DisplayConfig OLED = { true, 8, 9 };   // SSD1306 128x32, I2C SDA, 
 
 static const EncoderConfig ENCODERS[] = {
     //  A  B  counts/detent  reverse  label
-    {   4, 5, 4,             false,   "wheel" },   // encoder(0): thumb wheel
-    {   6, 7, 4,             false,   "iso"   },   // encoder(1): dedicated ISO dial
+    {   4, 5, 4,             true,    "wheel" },   // encoder(0): thumb wheel
+    {   6, 7, 4,             true,    "iso"   },   // encoder(1): dedicated ISO dial
 };
 
 static const ButtonConfig BUTTONS[] = {
@@ -46,7 +46,8 @@ static const ButtonConfig BUTTONS[] = {
     {   16,  true,      "full"  },   // button(1): shutter full-press (stage 2)
     {   17,  true,      "rec"   },   // button(2): record start/stop
     {   18,  true,      "push"  },   // button(3): thumb wheel's push switch
-    {   21,  true,      "fn"    },   // button(4): function / shift
+    {   10,  true,      "fn"    },   // button(4): function / shift (not wired yet: GPIO 10 is free)
+    {   21,  true,      "isopush"},  // button(5): ISO dial's push switch
 };
 
 // Number of user layers. Layer 0 is the default; the Fn button holds layer 1.
@@ -69,8 +70,8 @@ static const Binding BINDINGS[] = {
     // Dedicated REC button (works even when locked)
     { button(2),   Trigger::Short, MODE_ANY,   LAYER_ANY, recordToggle() },
 
-    // Fn + wheel push in video: switch base ISO Low/High (ZR dual base ISO)
-    { button(3),   Trigger::Short, MODE_VIDEO, layer(1),  baseIsoToggle() },
+    // ISO dial push in video: switch base ISO Low/High (ZR dual base ISO)
+    { button(5),   Trigger::Short, MODE_VIDEO, LAYER_ANY, baseIsoToggle() },
 
     // Wheel push: next setting; long press: lock / unlock the controls
     { button(3),   Trigger::Short, MODE_ANY,   LAYER_ANY, selectNext() },
@@ -94,7 +95,7 @@ static const Setting PHOTO_SETTINGS[] = {
 };
 
 static const Setting VIDEO_SETTINGS[] = {
-    Setting::ISO, Setting::Shutter, Setting::WhiteBalance, Setting::Aperture,
+    Setting::ISO, Setting::Shutter, Setting::WhiteBalance, Setting::Aperture, Setting::ExposureComp,
 };
 
 }  // namespace config

@@ -7,7 +7,8 @@
 // reach the camera yet. Photo/video mode follows the camera's switch.
 //
 // Serial: 'v' toggle photo/video mode (no camera only), 's' link status,
-//         'p' pair, 'b' toggle base ISO (video),
+//         'p' pair, 'q' disconnect cleanly (before reflashing), 'c' reconnect,
+//         'b' toggle base ISO (video),
 //         'h' toggle shutter speed/angle (video), 'y' accept pairing code, 'n' cancel pairing, 'o' list the
 //         values the camera offers, 'a' dump the listed camera properties,
 //         'A' scan every property code, 'w' show properties changed since
@@ -227,6 +228,8 @@ static void onSerial(char c) {
             break;
         case 's': camLink.printStatus(Serial); break;
         case 'p': camLink.forcePair(); break;
+        case 'q': camLink.disconnect(); break;
+        case 'c': camLink.connect(); break;
         case 'y': camLink.onButtonPress(); break;
         case 'n': camLink.cancel(); break;
         case 'o': printOptions(); break;

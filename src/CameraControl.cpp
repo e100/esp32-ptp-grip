@@ -81,8 +81,9 @@ void CameraControl::_apply(Setting s, int16_t delta) {
     }
 
     char text[24];
+    bool movie = _camera.movieMode();
     if (target == o.current) {                 // already at the end of the list
-        format(s, o.current, text, sizeof(text));
+        format(s, o.current, movie, text, sizeof(text));
         _say("%s", text);
         return;
     }
@@ -92,7 +93,7 @@ void CameraControl::_apply(Setting s, int16_t delta) {
         _say("%s: %s", name, cameraResultStr(r));
         return;
     }
-    format(s, target, text, sizeof(text));
+    format(s, target, movie, text, sizeof(text));
     _say("%s", text);
 }
 
@@ -143,12 +144,20 @@ static unsigned nominalDenominator(uint32_t t) {
     return best;
 }
 
-void CameraControl::format(Setting s, int32_t value, char* buf, size_t len) {
+void CameraControl::format(Setting s, int32_t value, bool movie, char* buf, size_t len) {
     switch (s) {
         case Setting::ISO:
             snprintf(buf, len, "ISO %ld", (long)value);
             break;
         case Setting::Shutter: {
+            if (movie) {                              // numerator << 16 | denominator
+                uint32_t num = (uint32_t)value >> 16, den = (uint32_t)value & 0xFFFF;
+                if (den == 0 || num == 0) snprintf(buf, len, "Shutter --");
+                else if (num == 1)        snprintf(buf, len, "1/%lu", (unsigned long)den);
+                else if (den == 1)        snprintf(buf, len, "%lus", (unsigned long)num);
+                else                      snprintf(buf, len, "%.1fs", (double)num / den);
+                break;
+            }
             uint32_t t = (uint32_t)value;            // seconds * 10000
             if (t >= 0xFFFFFFF0u)   snprintf(buf, len, "Bulb");
             else if (t == 0)        snprintf(buf, len, "Shutter --");

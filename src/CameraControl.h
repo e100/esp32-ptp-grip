@@ -5,6 +5,7 @@
 // Each step reads the property's allowed values from the camera
 // (GetDevicePropDesc) and moves the current value along that list, so the
 // grip follows whatever the camera offers in its current mode and lens.
+// In movie mode the library addresses the movie settings instead.
 // Steps that arrive while a camera call is in progress add up and are sent
 // as one change.
 // ============================================================================
@@ -24,8 +25,9 @@ public:
     // Text for the display after a change was applied (or refused), once.
     bool takeMessage(char* buf, size_t len);
 
-    // "ISO 800", "1/250", "f/5.6", "EC +0.7", "WB Auto". value in raw PTP units.
-    static void format(grip::Setting s, int32_t value, char* buf, size_t len);
+    // "ISO 800", "1/250", "f/5.6", "EC +0.7", "WB Auto". value in raw PTP units;
+    // movie: the camera is in movie mode (shutter is numerator << 16 | denominator).
+    static void format(grip::Setting s, int32_t value, bool movie, char* buf, size_t len);
     static bool settingFor(CameraProperty prop, grip::Setting& out);
 
 private:

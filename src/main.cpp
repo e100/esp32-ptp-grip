@@ -4,9 +4,9 @@
 // the binding engine, and shows the resulting commands on Serial and the OLED.
 // Joins the camera's WiFi and pairs with it (see CameraLink.h). Encoder steps
 // change the camera's settings (CameraControl.h); shutter and record don't
-// reach the camera yet.
+// reach the camera yet. Photo/video mode follows the camera's switch.
 //
-// Serial: 'v' toggle photo/video mode, 's' link status, 'p' pair,
+// Serial: 'v' toggle photo/video mode (no camera only), 's' link status, 'p' pair,
 //         'y' accept pairing code, 'n' cancel pairing, 'o' list the values
 //         the camera offers, 'a' dump the listed camera properties, 'A' scan
 //         every property code, 'i' DeviceInfo, 'd' camera diagnostics,
@@ -94,7 +94,7 @@ static void onPropChanged(CameraProperty prop, uint32_t value, void*) {
     Setting s;
     if (!CameraControl::settingFor(prop, s)) return;
     int32_t v = prop == CameraProperty::EXPOSURE_COMPENSATION ? (int16_t)value : (int32_t)value;
-    CameraControl::format(s, v, lastLine, sizeof(lastLine));
+    CameraControl::format(s, v, camera.movieMode(), lastLine, sizeof(lastLine));
     Serial.printf("camera: %s\n", lastLine);
     redraw();
 }
@@ -112,7 +112,7 @@ static void printOptions() {
             continue;
         }
         char cur[24];
-        CameraControl::format(s, o.current, cur, sizeof(cur));
+        CameraControl::format(s, o.current, camera.movieMode(), cur, sizeof(cur));
         Serial.printf("%-8s now %s (%ld), %s", settingName(s), cur, (long)o.current,
                       o.writable ? "writable" : "read-only");
         if (o.form == NikonPropOptions::Form::Range) {
@@ -128,6 +128,10 @@ static void printOptions() {
 static void onSerial(char c) {
     switch (c) {
         case 'v':
+            if (camLink.connected()) {
+                Serial.println("mode follows the camera's photo/video switch");
+                break;
+            }
             engine.setCameraMode(engine.cameraMode() == CameraMode::Photo ? CameraMode::Video : CameraMode::Photo);
             snprintf(lastLine, sizeof(lastLine), "mode %s", engine.cameraMode() == CameraMode::Photo ? "photo" : "video");
             Serial.println(lastLine);
@@ -213,6 +217,17 @@ void loop() {
 
     camLink.update(now);
     if (camLink.takeChanged()) redraw();
+
+    // Follow the camera's photo/video switch (read by camera.poll())
+    if (camLink.connected()) {
+        CameraMode mode = camera.movieMode() ? CameraMode::Video : CameraMode::Photo;
+        if (mode != engine.cameraMode()) {
+            engine.setCameraMode(mode);
+            snprintf(lastLine, sizeof(lastLine), "%s mode", mode == CameraMode::Video ? "VIDEO" : "PHOTO");
+            Serial.println(lastLine);
+            redraw();
+        }
+    }
 
     control.update(camLink.connected());
     if (control.takeMessage(lastLine, sizeof(lastLine))) {

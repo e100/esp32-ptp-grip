@@ -26,6 +26,12 @@ public:
     // Switch the video shutter between speed and angle. Applied by update().
     void toggleShutterMode() { _shutterModeToggle = true; }
 
+    // Shutter button stages and record. Applied by update(), in order.
+    void shutterHalf(bool on);
+    void shutterFull(bool on);
+    void recordToggle() { _recordToggle = true; }
+    bool recording() const { return _camera.isRecording(); }
+
     // Sends at most one pending change. Call from loop().
     void update(bool connected);
 
@@ -46,9 +52,17 @@ private:
     NikonPropOptions _options;   // large: kept here rather than on the stack
     bool             _baseIsoToggle = false;
     bool             _shutterModeToggle = false;
+    bool             _afRequest = false;      // half-press: autofocus
+    bool             _captureRequest = false; // full press in photo mode: take a picture
+    bool             _recordToggle = false;
+    bool             _halfHeld = false;
+    bool             _focused = false;        // AF done for the current half-press
 
     void _apply(grip::Setting s, int16_t delta);
     void _applyShutterModeToggle();
+    void _applyAutofocus();
+    void _applyCapture();
+    void _applyRecordToggle();
     void _applyBaseIsoToggle();
     // Any setting as format(), but ISO in movie mode as "ISO 6400 H*": the base
     // ISO letter, and '*' at the base's native ISO.

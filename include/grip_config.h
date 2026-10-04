@@ -90,6 +90,12 @@ static const bool     BASE_ISO_SET_NATIVE = true;
 static const uint32_t BASE_ISO_LOW_NATIVE  = 800;
 static const uint32_t BASE_ISO_HIGH_NATIVE = 6400;
 
+// Shutter button: half-press autofocuses; full press takes a picture in photo
+// mode (without AF again if the half-press already focused). In video mode a
+// full press starts/stops recording when FULL_PRESS_RECORDS_IN_VIDEO is true,
+// like NX Tether's shutter button; the REC button always does.
+static const bool FULL_PRESS_RECORDS_IN_VIDEO = true;
+
 static const Setting PHOTO_SETTINGS[] = {
     Setting::Shutter, Setting::Aperture, Setting::ISO, Setting::ExposureComp, Setting::WhiteBalance,
 };

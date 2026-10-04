@@ -30,7 +30,30 @@ void CameraControl::step(Setting s, int16_t delta) {
     if ((size_t)s < (size_t)Setting::COUNT) _pending[(size_t)s] += delta;
 }
 
+void CameraControl::shutterHalf(bool on) {
+    _halfHeld = on;
+    if (on) _afRequest = true;
+    else    _focused = false;
+}
+
+void CameraControl::shutterFull(bool on) {
+    if (!on) return;
+    if (_camera.movieMode() && grip::config::FULL_PRESS_RECORDS_IN_VIDEO) _recordToggle = true;
+    else if (!_camera.movieMode()) _captureRequest = true;
+}
+
 void CameraControl::update(bool connected) {
+    // Shutter and record come first: they are time-critical
+    if (_afRequest || _captureRequest || _recordToggle) {
+        if (!connected) {
+            _afRequest = _captureRequest = _recordToggle = false;
+            _say("No camera");
+            return;
+        }
+        if (_afRequest)      { _afRequest = false;      _applyAutofocus();    return; }
+        if (_captureRequest) { _captureRequest = false; _applyCapture();      return; }
+        if (_recordToggle)   { _recordToggle = false;   _applyRecordToggle(); return; }
+    }
     if (_baseIsoToggle) {
         _baseIsoToggle = false;
         if (connected) _applyBaseIsoToggle();
@@ -153,6 +176,36 @@ void CameraControl::_applyBaseIsoToggle() {
         Serial.printf("cam: set ISO %lu after base change: %s\n", (unsigned long)native, cameraResultStr(r));
     }
     _say("Base %s", toHigh ? "HIGH" : "LOW");
+}
+
+void CameraControl::_applyAutofocus() {
+    CameraResult r = _camera.autofocus();
+    Serial.printf("cam: autofocus: %s\n", cameraResultStr(r));
+    _focused = r == CAM_OK && _halfHeld;
+    _say(r == CAM_OK ? "AF" : "AF: %s", cameraResultStr(r));
+}
+
+// Already focused by a held half-press: release without AF, otherwise AF + release.
+void CameraControl::_applyCapture() {
+    bool af = !_focused;
+    CameraResult r = af ? _camera.initiateCapture() : _camera.releaseShutter();
+    Serial.printf("cam: capture (%s): %s\n", af ? "AF" : "no AF", cameraResultStr(r));
+    if (r == CAM_OK) _say("Shot");
+    else             _say("Shot: %s", cameraResultStr(r));
+}
+
+void CameraControl::_applyRecordToggle() {
+    if (!_camera.movieMode()) {
+        _say("REC: video mode");
+        return;
+    }
+    bool start = !_camera.isRecording();
+    CameraResult r = start ? _camera.startMovie() : _camera.stopMovie();
+    const char* why = (start && r == CAM_E_NOT_READY && _camera.lastMovieProhibit())
+                      ? NikonCamera::movieProhibitText(_camera.lastMovieProhibit()) : cameraResultStr(r);
+    Serial.printf("cam: %s recording: %s\n", start ? "start" : "stop", why);
+    if (r == CAM_OK) _say(start ? "REC" : "STOP");
+    else             _say("%s: %s", start ? "REC" : "STOP", why);
 }
 
 void CameraControl::_applyShutterModeToggle() {

@@ -3,17 +3,18 @@
 // Reads the encoders and buttons from include/grip_config.h, runs them through
 // the binding engine, and shows the resulting commands on Serial and the OLED.
 // Joins the camera's WiFi and pairs with it (see CameraLink.h). Encoder steps
-// change the camera's settings (CameraControl.h); shutter and record don't
-// reach the camera yet. Photo/video mode follows the camera's switch.
+// change the camera's settings (CameraControl.h); the shutter button focuses
+// and shoots, REC starts/stops movies. Photo/video mode follows the camera's switch.
 //
 // Serial: 'v' toggle photo/video mode (no camera only), 's' link status,
 //         'p' pair, 'q' disconnect cleanly (before reflashing), 'c' reconnect,
 //         'b' toggle base ISO (video),
-//         'h' toggle shutter speed/angle (video), 'y' accept pairing code, 'n' cancel pairing, 'o' list the
+//         'h' toggle shutter speed/angle (video), 'f' autofocus, 't' shutter
+//         press, 'R' record start/stop, 'y' accept pairing code, 'n' cancel pairing, 'o' list the
 //         values the camera offers, 'a' dump the listed camera properties,
 //         'A' scan every property code, 'w' show properties changed since
 //         the last 'w', 'x' write a property by code, 'r' send any PTP
-//         operation and show the reply, 'e' toggle showing
+//         operation and show the reply, 'k' poll Nikon GetEventEx, 'e' toggle showing
 //         camera events, 'i' DeviceInfo, 'g' Nikon vendor property codes,
 //         'd' camera diagnostics, 'l' toggle library debug logging.
 
@@ -53,6 +54,8 @@ static CameraLink     camLink(camera, session);
 static CameraControl  control(camera);
 static bool           debugLog = false;
 static bool           showEvents = false;
+static bool           pollEventEx = false;   // 'k': poll Nikon GetEventEx and print what it returns
+static uint32_t       lastEventEx = 0;
 
 static char lastLine[24] = "ready";
 
@@ -78,7 +81,7 @@ static void redraw() {
     char status[32];
     if (camLink.connected() || camLink.state() == CameraLink::State::Disabled) {
         snprintf(status, sizeof(status), "%s L%u  %s%s",
-                 engine.cameraMode() == CameraMode::Photo ? "PHOTO" : "VIDEO",
+                 control.recording() ? "*REC*" : engine.cameraMode() == CameraMode::Photo ? "PHOTO" : "VIDEO",
                  engine.activeLayer(), settingName(engine.selected()),
                  engine.locked() ? "  LOCK" : "");
     } else {
@@ -214,6 +217,40 @@ static void rawOperation() {
     if (shown) Serial.println(len > shown ? "\n  ..." : "");
 }
 
+// Nikon GetEventEx (0x941C), polled as NX Tether does. Unlike the PTP/IP event
+// channel it also reports changes to 32-bit properties. Data: UINT32 count,
+// then per event UINT16 code, UINT16 parameter count, UINT32 parameters.
+static void pollNikonEvents() {
+    static uint8_t buf[2048];
+    size_t len = 0;
+    uint16_t response = 0;
+    if (!session.dataIn(0x941C, nullptr, 0, buf, sizeof(buf), len, response)) {
+        Serial.println("GetEventEx: transaction failed, polling stopped");
+        pollEventEx = false;
+        return;
+    }
+    if (response != 0x2001) {
+        Serial.printf("GetEventEx: response 0x%04X, polling stopped\n", response);
+        pollEventEx = false;
+        return;
+    }
+    if (len < 4) return;
+    uint32_t n = (uint32_t)buf[0] | ((uint32_t)buf[1] << 8) | ((uint32_t)buf[2] << 16) | ((uint32_t)buf[3] << 24);
+    size_t pos = 4;
+    for (uint32_t i = 0; i < n && pos + 4 <= len; i++) {
+        uint16_t code = (uint16_t)(buf[pos] | (buf[pos + 1] << 8));
+        uint16_t np   = (uint16_t)(buf[pos + 2] | (buf[pos + 3] << 8));
+        pos += 4;
+        Serial.printf("eventEx %04X", code);
+        for (uint16_t k = 0; k < np && pos + 4 <= len; k++, pos += 4) {
+            uint32_t p = (uint32_t)buf[pos] | ((uint32_t)buf[pos + 1] << 8) |
+                         ((uint32_t)buf[pos + 2] << 16) | ((uint32_t)buf[pos + 3] << 24);
+            Serial.printf(" %lX", (unsigned long)p);
+        }
+        Serial.println(code == 0x4006 ? "   (property changed)" : (code & 0xF000) == 0xC000 ? "   (Nikon event)" : "");
+    }
+}
+
 static void onSerial(char c) {
     switch (c) {
         case 'v':
@@ -241,7 +278,14 @@ static void onSerial(char c) {
         case 'x': writeProperty(); break;
         case 'b': control.toggleBaseIso(); break;
         case 'h': control.toggleShutterMode(); break;
+        case 'f': control.shutterHalf(true); control.shutterHalf(false); break;   // autofocus once
+        case 't': control.shutterFull(true); break;                              // shutter (photo) / record (video)
+        case 'R': control.recordToggle(); break;
         case 'r': rawOperation(); break;
+        case 'k':
+            pollEventEx = !pollEventEx;
+            Serial.printf("Nikon GetEventEx polling %s\n", pollEventEx ? "on" : "off");
+            break;
         case 'e':
             showEvents = !showEvents;
             Serial.printf("camera events %s\n", showEvents ? "shown" : "hidden");
@@ -259,6 +303,9 @@ static void handle(const Command* cmds, size_t n) {
         if (cmds[i].type == CommandType::StepSetting) control.step(cmds[i].setting, cmds[i].delta);
         if (cmds[i].type == CommandType::BaseIsoToggle) control.toggleBaseIso();
         if (cmds[i].type == CommandType::ShutterModeToggle) control.toggleShutterMode();
+        if (cmds[i].type == CommandType::ShutterHalf)  control.shutterHalf(cmds[i].on);
+        if (cmds[i].type == CommandType::ShutterFull)  control.shutterFull(cmds[i].on);
+        if (cmds[i].type == CommandType::RecordToggle) control.recordToggle();
         describe(cmds[i], lastLine, sizeof(lastLine));
         Serial.println(lastLine);
     }
@@ -292,6 +339,10 @@ void setup() {
 
     PtpIpSetLogCallback(onLibraryLog);
     camera.setOnPropChanged(onPropChanged);
+    // Needed on the ZR to record movies remotely, and to show the card's
+    // remaining time while connected. The library leaves it again in end()
+    // ('q'); send 'q' before reflashing.
+    camera.setApplicationMode(true);
     camLink.begin(config::CAMERA);
 }
 
@@ -330,6 +381,11 @@ void loop() {
             Serial.println(lastLine);
             redraw();
         }
+    }
+
+    if (pollEventEx && camLink.connected() && now - lastEventEx >= 100) {
+        lastEventEx = now;
+        pollNikonEvents();
     }
 
     control.update(camLink.connected());

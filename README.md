@@ -4,7 +4,7 @@ A DIY remote grip for cameras, built on an ESP32-S3. It controls the camera over
 
 Goals: two-stage shutter, record, and quick control of ISO, shutter, aperture, exposure compensation and white balance, with behaviour that adapts to photo vs. video mode. A small OLED shows pairing codes and current settings.
 
-**Status:** early development. Input handling (encoders, buttons, bindings, layers, lock) works and is tested. Camera control, the display UI and pairing screens are next. First target camera: Nikon ZR.
+**Status:** early development. Working on a Nikon ZR over WiFi: pairing, exposure settings in photo and video (including shutter angle and dual base ISO), shutter and movie recording. Input handling (encoders, buttons, bindings, layers, lock) is tested on the host. USB control and a fuller display UI are next.
 
 ## Hardware
 
@@ -51,7 +51,7 @@ pio run -t upload && pio device monitor   # build, flash, open serial monitor
 make -C test/host test                    # run the input-logic tests on your computer
 ```
 
-The current firmware pairs with the camera and shows each control's action on Serial and the OLED. It doesn't send those actions to the camera yet.
+The current firmware pairs with the camera and controls it: the encoders change exposure settings, the shutter button focuses (half-press) and takes a picture (full press, saved to the card), and REC starts and stops movie recording. In video mode a full shutter press also starts/stops recording, like NX Tether's shutter button (`FULL_PRESS_RECORDS_IN_VIDEO` in `grip_config.h`). While recording, the OLED status line shows `*REC*`. Recording started from the camera body isn't detected, so the grip's REC state can get out of step if both are used.
 
 Photo/video mode follows the camera's switch, and the encoders adjust the video exposure settings in video mode.
 
@@ -59,7 +59,7 @@ Photo/video mode follows the camera's switch, and the encoders adjust the video 
 
 **Dual base ISO (ZR, video):** pressing the ISO dial (`baseIsoToggle()`, or `b` over Serial) switches base ISO between Low and High. With `BASE_ISO_SET_NATIVE` (in `grip_config.h`) the grip also sets ISO to that base's native value, 800 for Low or 6400 for High by default. In video mode the ISO display shows the base (`L` or `H`) and marks the native ISO with `*`, for example `ISO 6400 H*`.
 
-Serial commands: `v` toggles photo/video mode when no camera is connected, `h` switches the video shutter between speed and angle, `b` switches base ISO (video), `s` shows the link status, `p` starts pairing, `q` disconnects from the camera cleanly (send it before reflashing) and `c` reconnects, `y`/`n` accept or cancel a pairing code, `o` lists the values the camera offers for each setting, `a` dumps the camera's properties (`A` scans every property code), `i` shows what the camera says it supports, `g` lists Nikon's vendor property codes, `w` shows which properties changed since the last `w`, `e` shows the camera's events, `x` writes a property by its code (for experiments), `r` sends any PTP operation and prints the reply, `d` dumps camera diagnostics, `l` toggles library debug logging.
+Serial commands: `f` autofocuses, `t` presses the shutter (a picture in photo mode, record start/stop in video), `R` starts/stops recording, `v` toggles photo/video mode when no camera is connected, `h` switches the video shutter between speed and angle, `b` switches base ISO (video), `s` shows the link status, `p` starts pairing, `q` disconnects from the camera cleanly (send it before reflashing) and `c` reconnects, `y`/`n` accept or cancel a pairing code, `o` lists the values the camera offers for each setting, `a` dumps the camera's properties (`A` scans every property code), `i` shows what the camera says it supports, `g` lists Nikon's vendor property codes, `w` shows which properties changed since the last `w`, `e` shows the camera's events, `x` writes a property by its code (for experiments), `r` sends any PTP operation and prints the reply, `k` polls Nikon's GetEventEx event queue and prints each event, `d` dumps camera diagnostics, `l` toggles library debug logging.
 
 `tools/ptpdecode.py capture.pcapng` decodes PTP/IP traffic from a Wireshark capture (e.g. of NX Tether talking to the camera), to find which operations and properties another app uses.
 

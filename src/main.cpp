@@ -6,12 +6,13 @@
 // change the camera's settings (CameraControl.h); shutter and record don't
 // reach the camera yet. Photo/video mode follows the camera's switch.
 //
-// Serial: 'v' toggle photo/video mode (no camera only), 's' link status, 'p' pair,
-//         'y' accept pairing code, 'n' cancel pairing, 'o' list the values
-//         the camera offers, 'a' dump the listed camera properties, 'A' scan
-//         every property code, 'w' show properties changed since the last
-//         'w', 'x' write a property by code, 'e' toggle showing camera events, 'i' DeviceInfo, 'd' camera diagnostics,
-//         'l' toggle library debug logging (includes camera events).
+// Serial: 'v' toggle photo/video mode (no camera only), 's' link status,
+//         'p' pair, 'y' accept pairing code, 'n' cancel pairing, 'o' list the
+//         values the camera offers, 'a' dump the listed camera properties,
+//         'A' scan every property code, 'w' show properties changed since
+//         the last 'w', 'x' write a property by code, 'e' toggle showing
+//         camera events, 'i' DeviceInfo, 'g' Nikon vendor property codes,
+//         'd' camera diagnostics, 'l' toggle library debug logging.
 
 #include <Arduino.h>
 #include <ESP32Encoder.h>
@@ -135,7 +136,7 @@ static void writeProperty() {
     line.trim();
     char* end;
     unsigned long code = strtoul(line.c_str(), &end, 16);
-    if (end == line.c_str() || code == 0 || code > 0xFFFF) {
+    if (end == line.c_str() || code == 0) {
         Serial.printf("write: can't read a property code from '%s'\n", line.c_str());
         return;
     }
@@ -146,12 +147,12 @@ static void writeProperty() {
         return;
     }
     Serial.print("before: ");
-    dumpCameraProp(camera, (uint16_t)code, Serial);
-    CameraResult r = camera.setPropertyRaw((uint16_t)code, (uint32_t)value);
+    dumpCameraProp(camera, (uint32_t)code, Serial);
+    CameraResult r = camera.setPropertyRaw((uint32_t)code, (uint32_t)value);
     Serial.printf("write %04lX = %ld: %s\n", code, value, cameraResultStr(r));
     delay(300);
     Serial.print("after:  ");
-    dumpCameraProp(camera, (uint16_t)code, Serial);
+    dumpCameraProp(camera, (uint32_t)code, Serial);
 }
 
 static void onSerial(char c) {
@@ -174,6 +175,7 @@ static void onSerial(char c) {
         case 'a': dumpCameraProps(camera, Serial, false); break;
         case 'A': dumpCameraProps(camera, Serial, true); break;
         case 'i': dumpDeviceInfo(camera, Serial); break;
+        case 'g': dumpVendorCodes(camera, Serial); break;
         case 'w': watchCameraProps(camera, Serial); break;
         case 'x': writeProperty(); break;
         case 'e':

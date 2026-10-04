@@ -12,7 +12,10 @@ void dumpCameraProps(NikonCamera& camera, Print& out, bool fullScan);
 void watchCameraProps(NikonCamera& camera, Print& out);
 
 // Print one property's line, as in the dump.
-void dumpCameraProp(NikonCamera& camera, uint16_t code, Print& out);
+void dumpCameraProp(NikonCamera& camera, uint32_t code, Print& out);
+
+// Print the vendor property codes from Nikon GetVendorCodes.
+void dumpVendorCodes(NikonCamera& camera, Print& out);
 
 // Print the DeviceInfo operation, event and property lists.
 void dumpDeviceInfo(NikonCamera& camera, Print& out);

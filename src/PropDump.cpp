@@ -73,14 +73,14 @@ static void printValue(Print& out, uint16_t type, const uint8_t* p) {
     }
 }
 
-static CameraResult dumpOne(NikonCamera& camera, uint16_t code, Print& out) {
+static CameraResult dumpOne(NikonCamera& camera, uint32_t code, Print& out) {
     const uint8_t* d;
     size_t len;
     CameraResult r = camera.readPropDesc(code, d, len);
     if (r != CAM_OK) return r;
 
     uint16_t type = (uint16_t)(d[2] | (d[3] << 8));
-    out.printf("%04X %-3s %s ", code, typeName(type), d[4] ? "rw" : "ro");
+    out.printf("%04lX %-3s %s ", (unsigned long)code, typeName(type), d[4] ? "rw" : "ro");
 
     size_t pos = 5;
     size_t n = valueSize(type, d + pos, len - pos);          // factory default
@@ -117,17 +117,19 @@ static CameraResult dumpOne(NikonCamera& camera, uint16_t code, Print& out) {
     return CAM_OK;
 }
 
-void dumpCameraProp(NikonCamera& camera, uint16_t code, Print& out) {
+void dumpCameraProp(NikonCamera& camera, uint32_t code, Print& out) {
     CameraResult r = dumpOne(camera, code, out);
-    if (r != CAM_OK) out.printf("%04X: %s\n", code, cameraResultStr(r));
+    if (r != CAM_OK) out.printf("%04lX: %s\n", (unsigned long)code, cameraResultStr(r));
 }
 
 // Property codes tried by a full scan: standard properties and the Nikon
-// vendor range. DeviceInfo may not list everything (the ZR lists 21).
+// vendor range, plus whatever Nikon GetVendorCodes reports outside them (the
+// 32-bit 0x1Dxxx codes of newer Z bodies). DeviceInfo may not list
+// everything (the ZR lists 21).
 struct CodeRange { uint16_t first, last; };
 static const CodeRange SCAN_RANGES[] = { { 0x5001, 0x5030 }, { 0xD000, 0xD7FF } };
 
-using VisitFn = CameraResult (*)(NikonCamera& camera, uint16_t code, Print& out);
+using VisitFn = CameraResult (*)(NikonCamera& camera, uint32_t code, Print& out);
 
 // Scan state shared by the loops below
 struct Scan {
@@ -141,7 +143,7 @@ struct Scan {
     Scan(NikonCamera& c, Print& o, VisitFn f) : camera(c), out(o), fn(f), lastPoll(millis()) {}
 
     // Returns false to stop: the connection looks dead.
-    bool visit(uint16_t code) {
+    bool visit(uint32_t code) {
         // Keep the session alive (answers the camera's keep-alive probes)
         if (millis() - lastPoll > 2000) {
             camera.poll();
@@ -151,7 +153,7 @@ struct Scan {
         if (r == CAM_OK) found++;
         failures = (r == CAM_E_PROTOCOL || r == CAM_E_TIMEOUT) ? failures + 1 : 0;
         if (failures >= 3 || !camera.isReady()) {
-            out.printf("dump: stopped at %04X, connection lost (%s)\n", code, cameraResultStr(r));
+            out.printf("dump: stopped at %04lX, connection lost (%s)\n", (unsigned long)code, cameraResultStr(r));
             return false;
         }
         return true;
@@ -163,8 +165,31 @@ struct Scan {
         out.println(" (may take a while)");
         bool ok = true;
         for (const CodeRange& r : SCAN_RANGES) {
-            for (uint32_t code = r.first; ok && code <= r.last; code++) ok = visit((uint16_t)code);
+            for (uint32_t code = r.first; ok && code <= r.last; code++) ok = visit(code);
         }
+
+        // Vendor codes outside the ranges, in ascending order (watch relies on it)
+        static uint32_t extra[512];
+        size_t total = 0, n = 0;
+        CameraResult r = camera.getVendorPropCodes(extra, sizeof(extra) / sizeof(extra[0]), total);
+        if (r != CAM_OK) {
+            out.printf("GetVendorCodes: %s\n", cameraResultStr(r));
+            return;
+        }
+        if (total > sizeof(extra) / sizeof(extra[0])) total = sizeof(extra) / sizeof(extra[0]);
+        for (size_t i = 0; i < total; i++) {
+            bool inRange = false;
+            for (const CodeRange& cr : SCAN_RANGES) inRange |= extra[i] >= cr.first && extra[i] <= cr.last;
+            if (!inRange) extra[n++] = extra[i];
+        }
+        for (size_t i = 1; i < n; i++) {                 // insertion sort, n is small
+            uint32_t v = extra[i];
+            size_t j = i;
+            while (j > 0 && extra[j - 1] > v) { extra[j] = extra[j - 1]; j--; }
+            extra[j] = v;
+        }
+        out.printf("GetVendorCodes: %u codes, %u outside the scanned ranges\n", (unsigned)total, (unsigned)n);
+        for (size_t i = 0; ok && i < n; i++) ok = visit(extra[i]);
     }
 };
 
@@ -173,6 +198,23 @@ static void printCodes(Print& out, const char* label, const uint16_t* codes, uin
     for (uint16_t i = 0; i < n; i++) {
         if (i % 16 == 0) out.print("\n ");
         out.printf(" %04X", codes[i]);
+    }
+    out.println();
+}
+
+void dumpVendorCodes(NikonCamera& camera, Print& out) {
+    static uint32_t codes[512];
+    size_t n = 0;
+    CameraResult r = camera.getVendorPropCodes(codes, sizeof(codes) / sizeof(codes[0]), n);
+    if (r != CAM_OK) {
+        out.printf("GetVendorCodes: %s\n", cameraResultStr(r));
+        return;
+    }
+    out.printf("GetVendorCodes (%u):", (unsigned)n);
+    if (n > sizeof(codes) / sizeof(codes[0])) n = sizeof(codes) / sizeof(codes[0]);
+    for (size_t i = 0; i < n; i++) {
+        if (i % 12 == 0) out.print("\n ");
+        out.printf(" %04lX", (unsigned long)codes[i]);
     }
     out.println();
 }
@@ -216,7 +258,7 @@ void dumpCameraProps(NikonCamera& camera, Print& out, bool fullScan) {
 // ----------------------------------------------------------------------------
 
 static constexpr size_t   WATCH_MAX = 768;
-static uint16_t watchCodes[2][WATCH_MAX];
+static uint32_t watchCodes[2][WATCH_MAX];
 static uint32_t watchHashes[2][WATCH_MAX];
 static size_t   watchCount[2];
 static uint8_t  watchCur;          // snapshot being built; the other is the previous one
@@ -230,7 +272,7 @@ static uint32_t fnv1a(const uint8_t* d, size_t n) {
     return h;
 }
 
-static CameraResult watchOne(NikonCamera& camera, uint16_t code, Print& out) {
+static CameraResult watchOne(NikonCamera& camera, uint32_t code, Print& out) {
     const uint8_t* d;
     size_t len;
     CameraResult r = camera.readPropDesc(code, d, len);
@@ -242,7 +284,7 @@ static CameraResult watchOne(NikonCamera& camera, uint16_t code, Print& out) {
     if (watchHavePrev) {
         // Codes in the previous snapshot below this one have disappeared
         while (watchPrevPos < watchCount[prev] && watchCodes[prev][watchPrevPos] < code) {
-            out.printf("gone    %04X\n", watchCodes[prev][watchPrevPos++]);
+            out.printf("gone    %04lX\n", (unsigned long)watchCodes[prev][watchPrevPos++]);
             watchChanges++;
         }
         if (watchPrevPos < watchCount[prev] && watchCodes[prev][watchPrevPos] == code) {
@@ -283,7 +325,7 @@ void watchCameraProps(NikonCamera& camera, Print& out) {
     if (watchHavePrev) {
         uint8_t prev = watchCur ^ 1;
         while (watchPrevPos < watchCount[prev]) {
-            out.printf("gone    %04X\n", watchCodes[prev][watchPrevPos++]);
+            out.printf("gone    %04lX\n", (unsigned long)watchCodes[prev][watchPrevPos++]);
             watchChanges++;
         }
         out.printf("=== watch end: %u changes among %u properties, %lu ms ===\n", watchChanges,

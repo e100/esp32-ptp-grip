@@ -388,6 +388,14 @@ void loop() {
         pollNikonEvents();
     }
 
+    // Recording started or stopped on the camera body (or by us): update the display
+    static bool wasRecording = false;
+    if (control.recording() != wasRecording) {
+        wasRecording = control.recording();
+        snprintf(lastLine, sizeof(lastLine), "%s", wasRecording ? "REC" : "STOP");
+        redraw();
+    }
+
     control.update(camLink.connected());
     if (control.takeMessage(lastLine, sizeof(lastLine))) {
         Serial.println(lastLine);

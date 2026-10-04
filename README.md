@@ -51,7 +51,7 @@ pio run -t upload && pio device monitor   # build, flash, open serial monitor
 make -C test/host test                    # run the input-logic tests on your computer
 ```
 
-The current firmware pairs with the camera and controls it: the encoders change exposure settings, the shutter button focuses (half-press) and takes a picture (full press, saved to the card), and REC starts and stops movie recording. In video mode a full shutter press also starts/stops recording, like NX Tether's shutter button (`FULL_PRESS_RECORDS_IN_VIDEO` in `grip_config.h`). While recording, the OLED status line shows `*REC*`. Recording started from the camera body isn't detected, so the grip's REC state can get out of step if both are used.
+The current firmware pairs with the camera and controls it: the encoders change exposure settings, the shutter button focuses (half-press) and takes a picture (full press, saved to the card), and REC starts and stops movie recording. In video mode a full shutter press also starts/stops recording, like NX Tether's shutter button (`FULL_PRESS_RECORDS_IN_VIDEO` in `grip_config.h`). While recording, the OLED status line shows `*REC*`. The grip follows the camera's recording state, so recording started or stopped on the camera body is shown too, and the next REC press does the right thing.
 
 Photo/video mode follows the camera's switch, and the encoders adjust the video exposure settings in video mode.
 
